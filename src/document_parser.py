@@ -12,12 +12,16 @@ from __future__ import annotations
 import html
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
+from config import AppConfig, load_config
+
 
 DEFAULT_RAW_FILENAME = "code_du_travail_raw.json"
+DEFAULT_OUTPUT_FILENAME = "code_du_travail_documents.json"
 
 _ARTICLE_NUM_PATTERN = re.compile(r"^([A-Za-z]+)(\d+)((?:-\d+)*)$")
 
@@ -185,3 +189,61 @@ def parse_documents(
             documents.append(document)
 
     return documents, skipped
+
+
+def load_and_build_documents(config: AppConfig) -> tuple[list[ParsedDocument], list[dict[str, Any]]]:
+    articles = load_raw_articles(config.paths.raw_data_dir)
+    return parse_documents(articles, config.corpus.source, config.corpus.date)
+
+
+def parse_corpus(
+    config: AppConfig | None = None,
+    output_filename: str = DEFAULT_OUTPUT_FILENAME,
+) -> tuple[Path, list[ParsedDocument], list[dict[str, Any]]]:
+    """Parse the raw corpus into documents and persist them to processed_data_dir."""
+
+    active_config = config or load_config()
+    documents, skipped = load_and_build_documents(active_config)
+
+    output = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "document_count": len(documents),
+        "skipped_count": len(skipped),
+        "documents": [asdict(document) for document in documents],
+    }
+
+    output_path = active_config.paths.processed_data_dir / output_filename
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return output_path, documents, skipped
+
+
+def print_quality_sample(
+    documents: list[ParsedDocument],
+    sample_size: int = 10,
+    seed: int | None = None,
+) -> None:
+    """Print a random sample of documents for manual quality review."""
+
+    import random
+
+    rng = random.Random(seed)
+    sample = rng.sample(documents, min(sample_size, len(documents)))
+
+    for document in sample:
+        preview = document.text[:300]
+        if len(document.text) > 300:
+            preview += "..."
+        print(f"--- {document.id} ---")
+        print(f"metadata: {document.metadata}")
+        print(f"text: {preview}")
+        print()
+
+
+if __name__ == "__main__":
+    saved_path, parsed_documents, skipped_articles = parse_corpus()
+    print(f"Documents saved to {saved_path}")
+    print(f"{len(parsed_documents)} documents produced, {len(skipped_articles)} articles skipped.")
+    print()
+    print_quality_sample(parsed_documents)
