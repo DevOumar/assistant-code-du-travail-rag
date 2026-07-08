@@ -60,6 +60,7 @@ Frameworks RAG interdits : LangChain et LlamaIndex.
 |   +-- chroma/
 +-- docs/
 +-- prompts/
+|   +-- moderator_prompt_system.txt
 |   +-- rag_prompt_system.txt
 +-- src/
 |   +-- config.py
@@ -88,7 +89,8 @@ aucun appel LLM.
 des interfaces injectees. Il ne depend pas directement de ChromaDB ni de Groq.
 
 `src/moderator.py` filtre localement les questions vides, les tentatives evidentes
-de prompt injection et les demandes hors perimetre du droit du travail.
+de prompt injection et les demandes hors perimetre du droit du travail. La politique
+de moderation est documentee dans `prompts/moderator_prompt_system.txt`.
 
 `src/cli.py` contient une boucle interactive testable. Le point d'entree concret sera
 active lorsque les implementations de retrieval et de generation seront integrees.
