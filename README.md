@@ -1,66 +1,80 @@
 # Assistant Code du travail RAG
 
-Projet final du module MD5 Data & IA. L'objectif est de construire un assistant
-RAG capable de repondre a des questions sur le droit du travail francais en citant
-les articles utilises comme sources.
+Projet final du module **MD5 Data & IA**.
 
-Cet assistant ne fournit pas de conseil juridique. Consultez un avocat ou
-l'inspection du travail pour votre situation personnelle.
+L'objectif est de construire un assistant RAG capable de répondre à des questions
+sur le Code du travail français à partir d'un corpus contrôlé. L'assistant doit
+retrouver les passages utiles, générer une réponse sourcée et citer les articles
+utilisés.
 
-## Objectifs
+> Cet assistant ne fournit pas de conseil juridique. Consultez un avocat ou
+> l'inspection du travail pour votre situation personnelle.
 
-- charger et preparer un corpus juridique lie au Code du travail ;
-- transformer les textes en documents structures avec metadonnees ;
-- decouper les documents en chunks coherents ;
-- indexer les chunks dans une base vectorielle persistante ;
-- rechercher les chunks pertinents pour une question ;
-- generer une reponse sourcee avec citations d'articles ;
-- refuser de repondre quand l'information n'est pas dans la base ;
-- afficher systematiquement l'avertissement juridique obligatoire ;
-- fournir une interface en ligne de commande ;
-- fournir une interface web de chat pour l'utilisateur final.
+## État du projet
 
-## Etat actuel
+Le dépôt contient déjà les fondations techniques du projet :
 
-Les briques suivantes sont deja preparees :
+- configuration centralisée avec variables d'environnement ;
+- chunking orienté articles du Code du travail ;
+- prompts externalisés dans des fichiers texte ;
+- orchestration RAG découplée du moteur vectoriel et du LLM ;
+- modération locale des questions utilisateur ;
+- interface CLI testable ;
+- interface web Streamlit sous forme de chat ;
+- tests unitaires sur les briques déjà livrées.
 
-- configuration applicative centralisee ;
-- chunking article-preserving ;
-- construction des prompts juridiques ;
-- orchestration RAG abstraite par injection de dependances ;
-- moderation locale des entrees utilisateur ;
-- boucle CLI testable ;
-- interface web Streamlit type chat.
+Les parties qui dépendent encore de l'intégration finale sont le chargement réel du
+corpus, le parsing complet des documents juridiques, l'indexation ChromaDB, le
+retrieval Top-k et le client Groq concret.
 
-Les implementations concretes suivantes sont attendues sur les branches dediees :
+## Fonctionnement attendu
 
-- chargement du corpus ;
-- parsing des documents ;
-- base vectorielle ChromaDB ;
-- retrieval Top-k ;
-- integration concrete du generateur Groq.
+Le pipeline final suivra ce parcours :
+
+```text
+Question utilisateur
+        |
+        v
+Modération locale
+        |
+        v
+Retrieval Top-k dans ChromaDB
+        |
+        v
+Construction du prompt avec contexte et date du corpus
+        |
+        v
+Génération Groq
+        |
+        v
+Réponse avec articles cités, sources et avertissement juridique
+```
+
+Le code actuel prépare cette architecture sans dépendre directement des
+implémentations concrètes de ChromaDB et Groq. Ces dépendances seront branchées au
+moment de l'intégration.
 
 ## Technologies
 
 - Python 3.10+
-- ChromaDB
-- Sentence Transformers
-- Groq
-- pypdf
-- python-dotenv
-- pytest
-- Streamlit
+- ChromaDB pour la base vectorielle persistante
+- Sentence Transformers pour les embeddings
+- Groq pour la génération
+- pypdf pour l'extraction de PDF si nécessaire
+- python-dotenv pour la configuration locale
+- Streamlit pour l'interface web
+- pytest pour les tests
 
-Frameworks RAG interdits : LangChain et LlamaIndex.
+Contrainte du sujet : **LangChain et LlamaIndex ne sont pas utilisés**.
 
-## Structure du projet
+## Structure du dépôt
 
 ```text
 .
 +-- data/
-|   +-- raw/
-|   +-- processed/
-|   +-- chroma/
+|   +-- raw/          # corpus brut
+|   +-- processed/    # données normalisées
+|   +-- chroma/       # persistance ChromaDB
 +-- docs/
 +-- prompts/
 |   +-- moderator_prompt_system.txt
@@ -76,156 +90,183 @@ Frameworks RAG interdits : LangChain et LlamaIndex.
 +-- tests/
 ```
 
-## Architecture
+## Architecture technique
 
-`src/config.py` charge les variables d'environnement et expose une configuration
-typee. Ce module ne demarre aucun service externe.
+`src/config.py` charge la configuration depuis `.env` ou les variables
+d'environnement. Il expose les chemins, le modèle d'embedding, les paramètres de
+retrieval, les paramètres Groq, la date du corpus et l'avertissement juridique.
 
-`src/chunking.py` recoit des documents deja normalises et produit des chunks. Il ne
-lit pas le corpus brut.
+`src/chunking.py` reçoit des documents déjà normalisés et produit des chunks. Le
+module cherche à préserver les articles : un article court reste dans un seul chunk,
+un article trop long est découpé avec chevauchement.
 
-`src/prompting.py` assemble les messages systeme et utilisateur a partir d'une
-question et de chunks deja retrouves. Le prompt systeme est stocke dans
-`prompts/rag_prompt_system.txt` et rendu avec le contexte recupere. Le module ne fait
-aucun appel LLM.
+`src/prompting.py` construit les messages envoyés au LLM. Le prompt système est
+externalisé dans `prompts/rag_prompt_system.txt`, ce qui permet de le relire et de le
+modifier sans toucher au code.
 
-`src/rag.py` orchestre le retrieval, la construction du prompt et la generation via
-des interfaces injectees. Il ne depend pas directement de ChromaDB ni de Groq.
+`src/rag.py` orchestre le retrieval, la construction du prompt et la génération. Il
+utilise des interfaces injectées pour éviter de coupler le coeur RAG à ChromaDB ou à
+Groq.
 
-`src/moderator.py` filtre localement les questions vides, les tentatives evidentes
-de prompt injection et les demandes hors perimetre du droit du travail. La politique
-de moderation est documentee dans `prompts/moderator_prompt_system.txt`.
+`src/moderator.py` bloque les questions vides, les tentatives évidentes de prompt
+injection et les demandes hors périmètre du droit du travail français.
 
-`src/cli.py` contient une boucle interactive testable. Le point d'entree concret sera
-active lorsque les implementations de retrieval et de generation seront integrees.
+`src/cli.py` contient la boucle de discussion en ligne de commande.
 
-`src/web_app.py` fournit une interface web de chat avec historique, moderation,
-affichage de la date du corpus, avertissement juridique et rendu des sources. Tant
-que le retrieval et la generation concrete ne sont pas branches, elle affiche un
-message explicite indiquant que le pipeline RAG complet n'est pas encore connecte.
+`src/web_app.py` fournit une interface Streamlit type chat avec historique, statut du
+corpus, affichage du disclaimer et rendu des sources. Tant que le pipeline complet
+n'est pas connecté, l'interface indique clairement que le RAG final n'est pas encore
+disponible.
 
-## Choix de conception
+## Choix liés au sujet
 
-### Granularite du chunking
+### Granularité du chunking
 
-Les articles du Code du travail sont courts, denses et doivent rester citables. La
-strategie retenue consiste a conserver un article dans un seul chunk lorsqu'il tient
-dans la limite configuree.
+Les articles du Code du travail sont denses et doivent rester citables. La stratégie
+retenue conserve donc l'article comme unité principale. Si le texte dépasse la taille
+maximale configurée, il est découpé en fragments plus petits avec overlap pour ne pas
+perdre le contexte.
 
-Si un article est trop long, il est decoupe a l'interieur de l'article, en priorite
-sur les paragraphes, puis sur les phrases, avec un leger chevauchement. Cette approche
-hybride evite de melanger plusieurs articles tout en gardant des chunks exploitables
-pour l'indexation vectorielle.
+### Traçabilité
 
-### Tracabilite
+Chaque chunk doit conserver ses métadonnées : source, article, thème et score de
+retrieval lorsque disponible. Le prompt interdit d'inventer des articles et demande
+de citer uniquement les références présentes dans le contexte.
 
-Le numero d'article doit etre conserve dans les metadonnees et rendu visible dans le
-contexte fourni au LLM. Le prompt interdit d'inventer des articles et demande de ne
-citer que les articles presents dans le contexte.
+### Fraîcheur du corpus
 
-### Fraicheur du corpus
+Le droit du travail évolue. La configuration prévoit donc `CORPUS_SOURCE` et
+`CORPUS_DATE`. Cette date est transmise au prompt afin que l'assistant puisse
+indiquer honnêtement le risque d'obsolescence si le corpus est ancien ou non daté.
 
-La configuration prevoit `CORPUS_SOURCE` et `CORPUS_DATE`. La date du corpus est
-transmise au prompt afin que le systeme puisse signaler le risque d'obsolescence.
+### Réponses conditionnelles
 
-### Reponses conditionnelles
+Certaines réponses dépendent d'éléments non contenus dans le corpus : convention
+collective, taille de l'entreprise, statut du salarié, situation personnelle. Le
+prompt demande de signaler ces limites au lieu de donner une réponse trop absolue.
 
-Le prompt demande de signaler les limites quand une reponse depend d'une convention
-collective, de la taille de l'entreprise ou d'une situation personnelle.
+### Frontière du conseil juridique
 
-### Frontiere du conseil juridique
-
-Le systeme doit distinguer une question factuelle couverte par le corpus d'une demande
-d'interpretation personnelle. Dans le second cas, il doit rester general, signaler les
-limites et rappeler l'avertissement juridique.
+L'assistant doit rester informatif. Il ne doit pas remplacer un avocat, un syndicat,
+un service RH ou l'inspection du travail. L'avertissement juridique est centralisé
+dans la configuration et ajouté aux réponses.
 
 ## Installation
+
+Créer un environnement virtuel :
 
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
+```
+
+Installer les dépendances :
+
+```bash
 pip install -r requirements.txt
 ```
 
-Copier le fichier d'exemple :
+Créer le fichier local d'environnement :
 
 ```bash
 copy .env.example .env
 ```
 
-Renseigner ensuite les variables utiles localement. Les cles API ne doivent jamais
-etre commitees.
+Le fichier `.env` est ignoré par Git et ne doit jamais être poussé.
 
 ## Configuration
 
 Variables principales :
 
-- `GROQ_API_KEY`
-- `GROQ_MODEL`
-- `GROQ_TEMPERATURE`
-- `GROQ_MAX_TOKENS`
-- `RAW_DATA_DIR`
-- `PROCESSED_DATA_DIR`
-- `CHROMA_DB_DIR`
-- `PROMPTS_DIR`
-- `EMBEDDING_MODEL_NAME`
-- `CHROMA_COLLECTION_NAME`
-- `RETRIEVAL_TOP_K`
-- `CORPUS_SOURCE`
-- `CORPUS_DATE`
+```env
+APP_ENV=development
+GROQ_API_KEY=
+GROQ_MODEL=llama-3.1-8b-instant
+GROQ_TEMPERATURE=0.2
+GROQ_MAX_TOKENS=1024
 
-## Tests
+RAW_DATA_DIR=data/raw
+PROCESSED_DATA_DIR=data/processed
+CHROMA_DB_DIR=data/chroma
+PROMPTS_DIR=prompts
 
-```bash
-pytest
+EMBEDDING_MODEL_NAME=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+CHROMA_COLLECTION_NAME=code_du_travail
+RETRIEVAL_TOP_K=5
+
+CORPUS_SOURCE=
+CORPUS_DATE=
 ```
 
-Les tests actuels couvrent la configuration, le chunking, la construction de prompts,
-l'orchestration RAG abstraite, la moderation et la boucle CLI.
+`CORPUS_DATE` doit être renseignée avec la date réelle du corpus utilisé, par exemple
+`2026-07-08`.
 
-## Execution
+## Exécution
 
-L'execution finale dependra des branches d'indexation, retrieval et generation. Pour
-l'instant, les modules sont testables independamment.
-
-Le point d'entree CLI actuel indique explicitement que les dependances concretes ne
-sont pas encore branchees :
+Lancer la CLI :
 
 ```bash
 python src/cli.py
 ```
 
-Interface web de chat :
+Lancer l'interface web :
 
 ```bash
 streamlit run src/web_app.py
 ```
 
+Pendant la phase actuelle, l'interface web s'ouvre mais affiche un message indiquant
+que le pipeline RAG complet n'est pas encore connecté. C'est volontaire : le projet
+attend encore l'intégration du corpus, du retrieval et du générateur concret.
+
+## Tests
+
+Lancer la suite de tests :
+
+```bash
+pytest
+```
+
+Les tests couvrent actuellement la configuration, le chunking, les prompts, la
+modération, l'orchestration RAG abstraite, la CLI et l'interface web.
+
 ## Workflow Git
 
-Workflow impose :
+Workflow imposé :
 
 ```text
 feature/* -> dev -> main
 ```
 
-- chaque fonctionnalite est developpee sur une branche `feature/*` ;
-- chaque branche fait l'objet d'une Pull Request vers `dev` ;
-- `main` ne recoit que les versions validees depuis `dev` ;
-- les branches sont conservees jusqu'a la fin du projet.
+Règles appliquées dans ce dépôt :
 
-## Repartition des branches
+- chaque fonctionnalité est développée sur une branche `feature/*` ;
+- chaque branche est poussée sur GitHub ;
+- chaque intégration passe par une Pull Request vers `dev` ;
+- `main` reste la branche stable ;
+- les branches sont conservées jusqu'à la fin du projet pour permettre le contrôle de
+  l'historique Git.
 
-- Preparation donnees : `feature/corpus-loader`, `feature/document-parser`
-- Recherche vectorielle : `feature/vector-db`, `feature/retrieval`
-- Orchestration : `feature/config`, `feature/chunking`, `feature/prompt`,
-  `feature/rag`, `feature/moderator`, `feature/cli`, `feature/readme`
+Branches du projet :
 
-## Conventions de developpement
+- `feature/bootstrap`
+- `feature/config`
+- `feature/corpus-loader`
+- `feature/document-parser`
+- `feature/chunking`
+- `feature/vector-db`
+- `feature/retrieval`
+- `feature/prompt`
+- `feature/rag`
+- `feature/moderator`
+- `feature/cli`
+- `feature/readme`
 
-- ne jamais commiter de secrets ;
-- garder les commits courts, atomiques et explicites ;
-- tester chaque brique avant Pull Request ;
-- ne pas merger sa propre Pull Request sans revue ;
-- ne pas utiliser LangChain ni LlamaIndex ;
-- conserver les branches pour permettre le controle de l'historique Git.
+## Conventions de développement
+
+- ne jamais commiter `.env` ni une clé API ;
+- garder des commits courts, atomiques et lisibles ;
+- ajouter ou mettre à jour les tests avec chaque brique importante ;
+- ne pas mélanger plusieurs responsabilités dans une même branche ;
+- ne pas merger directement dans `main` ;
+- conserver les messages de commit explicites pour faciliter la revue de l'historique.
