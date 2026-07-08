@@ -7,21 +7,13 @@ any other model provider.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from config import LEGAL_DISCLAIMER
+from config import LEGAL_DISCLAIMER, PROJECT_ROOT
 
 
-SYSTEM_PROMPT = f"""Tu es un assistant specialise dans le Code du travail francais.
-
-Regles obligatoires :
-- Reponds uniquement a partir du contexte fourni.
-- Cite les numeros d'articles presents dans le contexte pour chaque affirmation juridique.
-- N'invente jamais d'article, de source ou de regle.
-- Si le contexte ne permet pas de repondre, dis clairement : "Je ne trouve pas cette information dans ma base."
-- Si la reponse depend d'une situation personnelle, de la convention collective ou de la taille de l'entreprise, signale cette limite.
-- Termine toujours la reponse par l'avertissement suivant : "{LEGAL_DISCLAIMER}"
-"""
+RAG_PROMPT_TEMPLATE_PATH = PROJECT_ROOT / "prompts" / "rag_prompt_system.txt"
 
 
 @dataclass(frozen=True)
@@ -45,30 +37,22 @@ def build_prompt_messages(
     context_items: Iterable[PromptContextItem | Mapping[str, Any]],
     corpus_date: str | None = None,
     legal_disclaimer: str = LEGAL_DISCLAIMER,
+    template_path: str | Path = RAG_PROMPT_TEMPLATE_PATH,
 ) -> PromptMessages:
     """Build system and user messages for the future generation step."""
 
     normalized_question = _require_non_empty(question, "question")
     normalized_items = [_normalize_context_item(item) for item in context_items]
-
-    user_prompt = "\n\n".join(
-        [
-            f"Question utilisateur :\n{normalized_question}",
-            f"Date du corpus : {corpus_date or 'non renseignee'}",
-            "Contexte disponible :",
-            format_context(normalized_items),
-            "Consigne de reponse :",
-            (
-                "Redige une reponse courte et structuree. Utilise uniquement le contexte ci-dessus, "
-                "cite les articles fournis et applique le cas d'echec si l'information manque."
-            ),
-            f"Avertissement juridique obligatoire : {legal_disclaimer}",
-        ]
+    system_prompt = render_rag_system_prompt(
+        context=format_context(normalized_items),
+        corpus_date=corpus_date,
+        legal_disclaimer=legal_disclaimer,
+        template_path=template_path,
     )
 
     return PromptMessages(
-        system=SYSTEM_PROMPT,
-        user=user_prompt,
+        system=system_prompt,
+        user=normalized_question,
     )
 
 
@@ -94,6 +78,28 @@ def build_no_context_answer(legal_disclaimer: str = LEGAL_DISCLAIMER) -> str:
         "Je ne trouve pas cette information dans ma base.\n\n"
         f"{legal_disclaimer}"
     )
+
+
+def render_rag_system_prompt(
+    context: str,
+    corpus_date: str | None = None,
+    legal_disclaimer: str = LEGAL_DISCLAIMER,
+    template_path: str | Path = RAG_PROMPT_TEMPLATE_PATH,
+) -> str:
+    """Render the file-based RAG system prompt."""
+
+    template = read_prompt_template(template_path)
+    return (
+        template.replace("{{CONTEXT}}", context)
+        .replace("{{CORPUS_DATE}}", corpus_date or "non renseignee")
+        .replace("{{LEGAL_DISCLAIMER}}", legal_disclaimer)
+    )
+
+
+def read_prompt_template(template_path: str | Path) -> str:
+    """Read a prompt template from disk."""
+
+    return Path(template_path).read_text(encoding="utf-8")
 
 
 def _normalize_context_item(item: PromptContextItem | Mapping[str, Any]) -> PromptContextItem:

@@ -17,7 +17,8 @@ l'inspection du travail pour votre situation personnelle.
 - generer une reponse sourcee avec citations d'articles ;
 - refuser de repondre quand l'information n'est pas dans la base ;
 - afficher systematiquement l'avertissement juridique obligatoire ;
-- fournir une interface en ligne de commande.
+- fournir une interface en ligne de commande ;
+- fournir une interface web de chat pour l'utilisateur final.
 
 ## Etat actuel
 
@@ -28,7 +29,8 @@ Les briques suivantes sont deja preparees :
 - construction des prompts juridiques ;
 - orchestration RAG abstraite par injection de dependances ;
 - moderation locale des entrees utilisateur ;
-- boucle CLI testable.
+- boucle CLI testable ;
+- interface web Streamlit type chat.
 
 Les implementations concretes suivantes sont attendues sur les branches dediees :
 
@@ -47,6 +49,7 @@ Les implementations concretes suivantes sont attendues sur les branches dediees 
 - pypdf
 - python-dotenv
 - pytest
+- Streamlit
 
 Frameworks RAG interdits : LangChain et LlamaIndex.
 
@@ -60,7 +63,8 @@ Frameworks RAG interdits : LangChain et LlamaIndex.
 |   +-- chroma/
 +-- docs/
 +-- prompts/
-|   +-- system_prompt.md
+|   +-- moderator_prompt_system.txt
+|   +-- rag_prompt_system.txt
 +-- src/
 |   +-- config.py
 |   +-- chunking.py
@@ -68,6 +72,7 @@ Frameworks RAG interdits : LangChain et LlamaIndex.
 |   +-- rag.py
 |   +-- moderator.py
 |   +-- cli.py
+|   +-- web_app.py
 +-- tests/
 ```
 
@@ -80,16 +85,24 @@ typee. Ce module ne demarre aucun service externe.
 lit pas le corpus brut.
 
 `src/prompting.py` assemble les messages systeme et utilisateur a partir d'une
-question et de chunks deja retrouves. Il ne fait aucun appel LLM.
+question et de chunks deja retrouves. Le prompt systeme est stocke dans
+`prompts/rag_prompt_system.txt` et rendu avec le contexte recupere. Le module ne fait
+aucun appel LLM.
 
 `src/rag.py` orchestre le retrieval, la construction du prompt et la generation via
 des interfaces injectees. Il ne depend pas directement de ChromaDB ni de Groq.
 
 `src/moderator.py` filtre localement les questions vides, les tentatives evidentes
-de prompt injection et les demandes hors perimetre du droit du travail.
+de prompt injection et les demandes hors perimetre du droit du travail. La politique
+de moderation est documentee dans `prompts/moderator_prompt_system.txt`.
 
 `src/cli.py` contient une boucle interactive testable. Le point d'entree concret sera
 active lorsque les implementations de retrieval et de generation seront integrees.
+
+`src/web_app.py` fournit une interface web de chat avec historique, moderation,
+affichage de la date du corpus, avertissement juridique et rendu des sources. Tant
+que le retrieval et la generation concrete ne sont pas branches, elle affiche un
+message explicite indiquant que le pipeline RAG complet n'est pas encore connecte.
 
 ## Choix de conception
 
@@ -180,6 +193,12 @@ sont pas encore branchees :
 
 ```bash
 python src/cli.py
+```
+
+Interface web de chat :
+
+```bash
+streamlit run src/web_app.py
 ```
 
 ## Workflow Git

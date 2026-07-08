@@ -2,19 +2,26 @@ import pytest
 
 from config import LEGAL_DISCLAIMER
 from prompting import (
-    SYSTEM_PROMPT,
     PromptContextItem,
     build_no_context_answer,
     build_prompt_messages,
     format_context,
+    render_rag_system_prompt,
 )
 
 
-def test_system_prompt_contains_project_constraints() -> None:
-    assert "uniquement a partir du contexte fourni" in SYSTEM_PROMPT
-    assert "N'invente jamais" in SYSTEM_PROMPT
-    assert "Je ne trouve pas cette information dans ma base." in SYSTEM_PROMPT
-    assert LEGAL_DISCLAIMER in SYSTEM_PROMPT
+def test_rendered_system_prompt_contains_project_constraints() -> None:
+    prompt = render_rag_system_prompt(
+        context="Article : L3121-27\nTexte : duree legale.",
+        corpus_date="2026-07-08",
+    )
+
+    assert "uniquement sur le contexte fourni" in prompt
+    assert "N'invente jamais" in prompt
+    assert "Je ne trouve pas cette information dans ma base." in prompt
+    assert "2026-07-08" in prompt
+    assert "Article : L3121-27" in prompt
+    assert LEGAL_DISCLAIMER in prompt
 
 
 def test_format_context_includes_article_metadata_and_text() -> None:
@@ -51,11 +58,10 @@ def test_build_prompt_messages_formats_question_context_and_disclaimer() -> None
         ],
     )
 
-    assert messages.system == SYSTEM_PROMPT
-    assert "Question utilisateur" in messages.user
-    assert "2026-07-08" in messages.user
-    assert "Article : L3121-27" in messages.user
-    assert LEGAL_DISCLAIMER in messages.user
+    assert messages.user == "Quelle est la duree legale du travail ?"
+    assert "2026-07-08" in messages.system
+    assert "Article : L3121-27" in messages.system
+    assert LEGAL_DISCLAIMER in messages.system
 
 
 def test_build_no_context_answer_contains_required_fallback_and_disclaimer() -> None:
