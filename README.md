@@ -47,6 +47,7 @@ Architecture generale cible, a enrichir au fil des branches :
 |   +-- chunking.py
 |   +-- prompting.py
 |   +-- rag.py
+|   +-- moderator.py
 +-- tests/
 ```
 
@@ -65,6 +66,10 @@ sans appeler de modele LLM.
 L'orchestration RAG est definie dans `src/rag.py`. Elle depend d'interfaces injectees
 pour le retrieval et la generation, afin de rester independante des implementations
 concretes ChromaDB et Groq.
+
+Le filtrage d'entree est gere dans `src/moderator.py`. Il detecte localement les
+questions vides, les tentatives evidentes de prompt injection et les demandes hors
+perimetre du droit du travail.
 
 ## Choix de conception
 
@@ -102,6 +107,13 @@ du pipeline avant l'arrivee des implementations concretes.
 L'avertissement juridique est garanti une derniere fois dans la couche RAG : si le
 generateur l'oublie, il est ajoute avant de retourner la reponse a l'utilisateur.
 
+### Moderation
+
+Le moderateur intervient avant le pipeline RAG. Il ne remplace pas le prompt systeme :
+il sert a refuser les entrees manifestement dangereuses ou hors sujet avant toute
+recherche ou generation. La premiere version est volontairement deterministe pour
+rester explicable en soutenance.
+
 ## Installation
 
 ```bash
@@ -122,7 +134,7 @@ Les cles API restent locales dans `.env` et ne doivent jamais etre commitees.
 
 Les scripts d'indexation et d'interrogation seront ajoutes dans les prochaines branches.
 Pour l'instant, la configuration applicative, la brique de chunking, la preparation des
-prompts et l'orchestration RAG abstraite sont disponibles.
+prompts, l'orchestration RAG abstraite et la moderation locale sont disponibles.
 
 ## Workflow Git
 
