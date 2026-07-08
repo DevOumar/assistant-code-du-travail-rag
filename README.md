@@ -46,6 +46,7 @@ Architecture generale cible, a enrichir au fil des branches :
 |   +-- config.py
 |   +-- chunking.py
 |   +-- prompting.py
+|   +-- rag.py
 +-- tests/
 ```
 
@@ -60,6 +61,10 @@ le corpus brut.
 La preparation des prompts est isolee dans `src/prompting.py`. Elle assemble les
 messages systeme et utilisateur a partir d'une question et de chunks deja retrouves,
 sans appeler de modele LLM.
+
+L'orchestration RAG est definie dans `src/rag.py`. Elle depend d'interfaces injectees
+pour le retrieval et la generation, afin de rester independante des implementations
+concretes ChromaDB et Groq.
 
 ## Choix de conception
 
@@ -87,6 +92,16 @@ indiquer "Je ne trouve pas cette information dans ma base." L'avertissement juri
 obligatoire est injecte dans le prompt systeme et dans le message utilisateur pour
 reduire le risque d'oubli.
 
+### Orchestration RAG
+
+La couche RAG assemble trois responsabilites deja separees : retrieval, construction
+du prompt et generation. Elle ne connait pas ChromaDB ni Groq directement. Ces
+dependances sont injectees via des interfaces, ce qui permet de tester le comportement
+du pipeline avant l'arrivee des implementations concretes.
+
+L'avertissement juridique est garanti une derniere fois dans la couche RAG : si le
+generateur l'oublie, il est ajoute avant de retourner la reponse a l'utilisateur.
+
 ## Installation
 
 ```bash
@@ -106,8 +121,8 @@ Les cles API restent locales dans `.env` et ne doivent jamais etre commitees.
 ## Execution
 
 Les scripts d'indexation et d'interrogation seront ajoutes dans les prochaines branches.
-Pour l'instant, seules la configuration applicative, la brique de chunking et la
-preparation des prompts sont disponibles.
+Pour l'instant, la configuration applicative, la brique de chunking, la preparation des
+prompts et l'orchestration RAG abstraite sont disponibles.
 
 ## Workflow Git
 
