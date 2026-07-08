@@ -87,7 +87,7 @@ class TestBuildDocument:
 
         assert document is not None
         assert document.id == "article-L3121-1"
-        assert document.text == "La duree du travail effectif est le temps de travail."
+        assert document.text == "Article L3121-1. La duree du travail effectif est le temps de travail."
         assert document.metadata == {
             "num": "L3121-1",
             "legiarti": "LEGIARTI000018487817",

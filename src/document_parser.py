@@ -152,9 +152,11 @@ def build_document(
     if not isinstance(content, str):
         return None
 
-    text = clean_html(content)
-    if not text:
+    cleaned_content = clean_html(content)
+    if not cleaned_content:
         return None
+
+    text = f"Article {num}. {cleaned_content}"
 
     section_path = article.get("section_path")
     title = section_path[-1] if isinstance(section_path, list) and section_path else None
