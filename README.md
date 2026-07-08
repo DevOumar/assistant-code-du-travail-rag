@@ -92,6 +92,82 @@ Les scripts d'indexation et d'interrogation seront ajoutes dans les prochaines b
 Pour l'instant, seules la configuration applicative et la brique de chunking sont
 disponibles.
 
+## Corpus Loader (feature/corpus-loader)
+
+### Source retenue
+
+Le corpus est recupere via l'**API Legifrance (environnement sandbox PISTE)**, plutot
+qu'un scraping HTML ou un import manuel de PDF. Un test manuel (OAuth2 + un appel
+`consult/legiPart`) a confirme que les identifiants du projet sont des identifiants
+sandbox : `sandbox-oauth.piste.gouv.fr` et `sandbox-api.piste.gouv.fr` doivent donc
+etre utilises tant que des identifiants production ne sont pas fournis.
+
+### Authentification
+
+Le flux est un **OAuth2 client credentials** :
+
+```
+POST https://sandbox-oauth.piste.gouv.fr/api/oauth/token
+Content-Type: application/x-www-form-urlencoded
+grant_type=client_credentials&client_id=...&client_secret=...&scope=openid
+```
+
+`src/corpus_loader.py` gere l'obtention et le renouvellement automatique du token :
+le jeton est mis en cache et rafraichi automatiquement des qu'il approche de son
+expiration (`expires_in`, avec une marge de securite), sans appel reseau superflu
+a chaque requete.
+
+### Endpoint utilise : `consult/legiPart`
+
+```
+POST https://sandbox-api.piste.gouv.fr/dila/legifrance/lf-engine-app/consult/legiPart
+{"textId": "LEGITEXT000006072050", "date": "<date du jour, ISO>"}
+```
+
+`LEGITEXT000006072050` est l'identifiant du Code du travail. Ce choix (plutot qu'un
+`/search` article par article via `typeChamp: NUM_ARTICLE`) permet de recuperer en un
+seul appel l'arborescence complete du code (sections, sous-sections, articles), avec
+pour chaque article son numero (`num`), son identifiant `LEGIARTI` et son contenu.
+Cela evite de multiplier les appels API (un par article) et donne directement la
+correspondance numero <-> LEGIARTI pour tout le corpus.
+
+### Themes couverts
+
+Seuls les articles dont le numero appartient aux plages suivantes sont conserves :
+
+- `L3121-1` a `L3121-36` : duree du travail
+- `L3141-1` a `L3141-32` : conges payes
+- `L1221-1` a `L1248-11` : contrat de travail
+- `L1231-1` a `L1237-20` : rupture du contrat de travail
+- `L1237-11` a `L1237-19` : rupture conventionnelle
+
+### Format de sortie brute
+
+Le resultat est ecrit tel quel (sans normalisation ni chunking) dans
+`data/raw/code_du_travail_raw.json` :
+
+```json
+{
+  "retrieved_at": "2026-07-08T12:00:00+00:00",
+  "source": "legifrance-sandbox",
+  "text_id": "LEGITEXT000006072050",
+  "endpoint": "https://sandbox-api.piste.gouv.fr/dila/legifrance/lf-engine-app/consult/legiPart",
+  "article_count": 123,
+  "articles": [
+    {
+      "num": "L3121-1",
+      "id": "LEGIARTI000018487817",
+      "content": "<p>...</p>",
+      "section_path": ["Partie legislative", "Livre Ier : Duree du travail", "..."]
+    }
+  ]
+}
+```
+
+Ce fichier brut sert d'entree a la future branche `feature/document-parser`, qui se
+charge de le normaliser vers le format `id`/`text`/`metadata` attendu par
+`chunking.py`.
+
 ## Workflow Git
 
 Le projet suit le workflow enseigne dans le TP Scribe :
