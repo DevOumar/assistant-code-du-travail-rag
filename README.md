@@ -17,7 +17,8 @@ l'inspection du travail pour votre situation personnelle.
 - generer une reponse sourcee avec citations d'articles ;
 - refuser de repondre quand l'information n'est pas dans la base ;
 - afficher systematiquement l'avertissement juridique obligatoire ;
-- fournir une interface en ligne de commande.
+- fournir une interface en ligne de commande ;
+- fournir une interface web de chat pour l'utilisateur final.
 
 ## Etat actuel
 
@@ -28,7 +29,8 @@ Les briques suivantes sont deja preparees :
 - construction des prompts juridiques ;
 - orchestration RAG abstraite par injection de dependances ;
 - moderation locale des entrees utilisateur ;
-- boucle CLI testable.
+- boucle CLI testable ;
+- interface web Streamlit type chat.
 
 Les implementations concretes suivantes sont attendues sur les branches dediees :
 
@@ -47,6 +49,7 @@ Les implementations concretes suivantes sont attendues sur les branches dediees 
 - pypdf
 - python-dotenv
 - pytest
+- Streamlit
 
 Frameworks RAG interdits : LangChain et LlamaIndex.
 
@@ -69,6 +72,7 @@ Frameworks RAG interdits : LangChain et LlamaIndex.
 |   +-- rag.py
 |   +-- moderator.py
 |   +-- cli.py
+|   +-- web_app.py
 +-- tests/
 ```
 
@@ -94,6 +98,11 @@ de moderation est documentee dans `prompts/moderator_prompt_system.txt`.
 
 `src/cli.py` contient une boucle interactive testable. Le point d'entree concret sera
 active lorsque les implementations de retrieval et de generation seront integrees.
+
+`src/web_app.py` fournit une interface web de chat avec historique, moderation,
+affichage de la date du corpus, avertissement juridique et rendu des sources. Tant
+que le retrieval et la generation concrete ne sont pas branches, elle affiche un
+message explicite indiquant que le pipeline RAG complet n'est pas encore connecte.
 
 ## Choix de conception
 
@@ -184,6 +193,12 @@ sont pas encore branchees :
 
 ```bash
 python src/cli.py
+```
+
+Interface web de chat :
+
+```bash
+streamlit run src/web_app.py
 ```
 
 ## Workflow Git
