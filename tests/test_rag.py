@@ -68,8 +68,8 @@ def test_rag_pipeline_builds_prompt_and_returns_sources() -> None:
     assert "trente-cinq heures" in response.answer
     assert LEGAL_DISCLAIMER in response.answer
     assert generator.last_messages is not None
-    assert "Article : L3121-27" in generator.last_messages.user
-    assert "2026-07-08" in generator.last_messages.user
+    assert "Article : L3121-27" in generator.last_messages.system
+    assert "2026-07-08" in generator.last_messages.system
 
 
 def test_ensure_legal_disclaimer_does_not_duplicate_existing_disclaimer() -> None:

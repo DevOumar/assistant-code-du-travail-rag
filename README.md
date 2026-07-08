@@ -60,7 +60,7 @@ Frameworks RAG interdits : LangChain et LlamaIndex.
 |   +-- chroma/
 +-- docs/
 +-- prompts/
-|   +-- system_prompt.md
+|   +-- rag_prompt_system.txt
 +-- src/
 |   +-- config.py
 |   +-- chunking.py
@@ -80,7 +80,9 @@ typee. Ce module ne demarre aucun service externe.
 lit pas le corpus brut.
 
 `src/prompting.py` assemble les messages systeme et utilisateur a partir d'une
-question et de chunks deja retrouves. Il ne fait aucun appel LLM.
+question et de chunks deja retrouves. Le prompt systeme est stocke dans
+`prompts/rag_prompt_system.txt` et rendu avec le contexte recupere. Le module ne fait
+aucun appel LLM.
 
 `src/rag.py` orchestre le retrieval, la construction du prompt et la generation via
 des interfaces injectees. Il ne depend pas directement de ChromaDB ni de Groq.
