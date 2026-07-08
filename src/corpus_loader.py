@@ -8,13 +8,17 @@ id/text/metadata contract; that stays the responsibility of the future
 
 from __future__ import annotations
 
+import json
 import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Mapping
 
 import requests
+
+from config import AppConfig, load_config
 
 
 OAUTH_TOKEN_URL = "https://sandbox-oauth.piste.gouv.fr/api/oauth/token"
@@ -22,6 +26,7 @@ API_BASE_URL = "https://sandbox-api.piste.gouv.fr/dila/legifrance/lf-engine-app"
 LEGI_PART_ENDPOINT = f"{API_BASE_URL}/consult/legiPart"
 
 CODE_DU_TRAVAIL_TEXT_ID = "LEGITEXT000006072050"
+DEFAULT_OUTPUT_FILENAME = "code_du_travail_raw.json"
 DEFAULT_REQUEST_TIMEOUT = 30
 TOKEN_EXPIRY_SAFETY_MARGIN = 30
 
@@ -213,3 +218,47 @@ def _parse_article_num(num: str) -> tuple[str, int, tuple[int, ...]] | None:
     prefix, major, rest = match.groups()
     rest_parts = tuple(int(part) for part in rest.split("-") if part)
     return prefix.upper(), int(major), rest_parts
+
+
+def load_corpus(
+    config: AppConfig | None = None,
+    query_date: str | None = None,
+    output_filename: str = DEFAULT_OUTPUT_FILENAME,
+) -> Path:
+    """Fetch, filter, and persist the raw Code du travail corpus for the covered themes."""
+
+    active_config = config or load_config()
+    client_id = active_config.legifrance.client_id
+    client_secret = active_config.legifrance.client_secret
+
+    if not client_id or not client_secret:
+        raise LegifranceAuthError(
+            "LEGIFRANCE_CLIENT_ID and LEGIFRANCE_CLIENT_SECRET must be set to load the corpus."
+        )
+
+    token_manager = LegifranceTokenManager(client_id, client_secret)
+    token = token_manager.get_token()
+
+    legi_part = fetch_legi_part(token, query_date=query_date)
+    articles = extract_articles(legi_part)
+    filtered = [article for article in articles if is_article_in_scope(article["num"])]
+
+    output = {
+        "retrieved_at": datetime.now(timezone.utc).isoformat(),
+        "source": "legifrance-sandbox",
+        "text_id": CODE_DU_TRAVAIL_TEXT_ID,
+        "endpoint": LEGI_PART_ENDPOINT,
+        "article_count": len(filtered),
+        "articles": filtered,
+    }
+
+    output_path = active_config.paths.raw_data_dir / output_filename
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return output_path
+
+
+if __name__ == "__main__":
+    saved_path = load_corpus()
+    print(f"Corpus saved to {saved_path}")
