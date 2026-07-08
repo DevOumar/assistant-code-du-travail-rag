@@ -9,13 +9,17 @@ id/text/metadata contract; that stays the responsibility of the future
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
+from typing import Any, Mapping
 
 import requests
 
 
 OAUTH_TOKEN_URL = "https://sandbox-oauth.piste.gouv.fr/api/oauth/token"
 API_BASE_URL = "https://sandbox-api.piste.gouv.fr/dila/legifrance/lf-engine-app"
+LEGI_PART_ENDPOINT = f"{API_BASE_URL}/consult/legiPart"
 
+CODE_DU_TRAVAIL_TEXT_ID = "LEGITEXT000006072050"
 DEFAULT_REQUEST_TIMEOUT = 30
 TOKEN_EXPIRY_SAFETY_MARGIN = 30
 
@@ -84,3 +88,79 @@ class LegifranceTokenManager:
 
         self._access_token = access_token
         self._expires_at = time.monotonic() + max(expires_in - TOKEN_EXPIRY_SAFETY_MARGIN, 0)
+
+
+def fetch_legi_part(
+    token: str,
+    text_id: str = CODE_DU_TRAVAIL_TEXT_ID,
+    query_date: str | None = None,
+    timeout: float = DEFAULT_REQUEST_TIMEOUT,
+) -> dict[str, Any]:
+    """Call consult/legiPart and return the parsed JSON article tree for a code."""
+
+    active_date = query_date or _today_iso()
+
+    try:
+        response = requests.post(
+            LEGI_PART_ENDPOINT,
+            json={"textId": text_id, "date": active_date},
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            timeout=timeout,
+        )
+    except requests.Timeout as exc:
+        raise LegifranceApiError("Timed out while calling consult/legiPart.") from exc
+    except requests.RequestException as exc:
+        raise LegifranceApiError(f"Failed to reach consult/legiPart: {exc}") from exc
+
+    if response.status_code != 200:
+        raise LegifranceApiError(
+            f"consult/legiPart returned HTTP {response.status_code}: {response.text}"
+        )
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise LegifranceApiError("consult/legiPart returned a non-JSON response.") from exc
+
+    if not isinstance(payload, dict) or "sections" not in payload:
+        raise LegifranceApiError(
+            "Unexpected consult/legiPart response structure: missing 'sections'."
+        )
+
+    return payload
+
+
+def extract_articles(legi_part_response: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Walk the sections/articles tree and flatten it, keeping the parent section path."""
+
+    articles = [_build_article(article, []) for article in legi_part_response.get("articles") or []]
+
+    for section in legi_part_response.get("sections") or []:
+        articles.extend(_walk_sections(section, []))
+
+    return articles
+
+
+def _walk_sections(node: Mapping[str, Any], parent_path: list[str]) -> list[dict[str, Any]]:
+    title = (node.get("title") or "").strip()
+    path = [*parent_path, title] if title else parent_path
+
+    articles = [_build_article(article, path) for article in node.get("articles") or []]
+
+    for sub_section in node.get("sections") or []:
+        articles.extend(_walk_sections(sub_section, path))
+
+    return articles
+
+
+def _build_article(article: Mapping[str, Any], section_path: list[str]) -> dict[str, Any]:
+    return {
+        "num": article.get("num"),
+        "id": article.get("id"),
+        "content": article.get("content"),
+        "section_path": list(section_path),
+    }
+
+
+def _today_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00Z")
