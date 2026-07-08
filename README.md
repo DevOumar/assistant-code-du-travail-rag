@@ -48,6 +48,7 @@ Architecture generale cible, a enrichir au fil des branches :
 |   +-- prompting.py
 |   +-- rag.py
 |   +-- moderator.py
+|   +-- cli.py
 +-- tests/
 ```
 
@@ -70,6 +71,10 @@ concretes ChromaDB et Groq.
 Le filtrage d'entree est gere dans `src/moderator.py`. Il detecte localement les
 questions vides, les tentatives evidentes de prompt injection et les demandes hors
 perimetre du droit du travail.
+
+La boucle de ligne de commande est preparee dans `src/cli.py`. Elle orchestre la saisie
+utilisateur, la moderation et l'affichage des reponses, mais attend encore les
+implementations concretes du retrieval et de la generation.
 
 ## Choix de conception
 
@@ -114,6 +119,13 @@ il sert a refuser les entrees manifestement dangereuses ou hors sujet avant tout
 recherche ou generation. La premiere version est volontairement deterministe pour
 rester explicable en soutenance.
 
+### Interface CLI
+
+La CLI est concue comme une boucle interactive simple : lire une question, appliquer la
+moderation, appeler le pipeline RAG injecte, afficher la reponse et les sources. Le point
+d'entree concret sera active quand les implementations de retrieval et de generation
+seront disponibles.
+
 ## Installation
 
 ```bash
@@ -134,7 +146,8 @@ Les cles API restent locales dans `.env` et ne doivent jamais etre commitees.
 
 Les scripts d'indexation et d'interrogation seront ajoutes dans les prochaines branches.
 Pour l'instant, la configuration applicative, la brique de chunking, la preparation des
-prompts, l'orchestration RAG abstraite et la moderation locale sont disponibles.
+prompts, l'orchestration RAG abstraite, la moderation locale et la boucle CLI testable
+sont disponibles.
 
 ## Workflow Git
 
