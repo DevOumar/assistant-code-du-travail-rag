@@ -1,4 +1,4 @@
-from moderator import InputModerator, ModerationStatus
+from moderator import InputModerator, ModerationStatus, read_moderator_prompt
 
 
 def test_moderator_allows_labor_law_question() -> None:
@@ -43,3 +43,11 @@ def test_moderator_can_disable_scope_check() -> None:
     )
 
     assert decision.status is ModerationStatus.ALLOWED
+
+
+def test_moderator_prompt_policy_is_externalized() -> None:
+    prompt = read_moderator_prompt()
+
+    assert "prompt injection" in prompt
+    assert "droit du travail francais" in prompt
+    assert "privilegie l'acceptation" in prompt

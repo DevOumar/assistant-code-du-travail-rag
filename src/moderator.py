@@ -9,7 +9,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Iterable
+
+from config import PROJECT_ROOT
+
+
+MODERATOR_PROMPT_TEMPLATE_PATH = PROJECT_ROOT / "prompts" / "moderator_prompt_system.txt"
 
 
 class ModerationStatus(str, Enum):
@@ -103,6 +109,12 @@ class InputModerator:
 
 def _normalize_question(question: str) -> str:
     return re.sub(r"\s+", " ", question).strip()
+
+
+def read_moderator_prompt(template_path: str | Path = MODERATOR_PROMPT_TEMPLATE_PATH) -> str:
+    """Read the moderation policy prompt from disk."""
+
+    return Path(template_path).read_text(encoding="utf-8")
 
 
 def _matches_any(text: str, patterns: Iterable[str]) -> bool:
