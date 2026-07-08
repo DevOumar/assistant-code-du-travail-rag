@@ -10,8 +10,16 @@ branches.
 from __future__ import annotations
 
 import html
+import json
 import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Mapping
 
+
+DEFAULT_RAW_FILENAME = "code_du_travail_raw.json"
+
+_ARTICLE_NUM_PATTERN = re.compile(r"^([A-Za-z]+)(\d+)((?:-\d+)*)$")
 
 _PARAGRAPH_BREAK_TAGS = re.compile(r"</(p|div)\s*>", re.IGNORECASE)
 _LINE_BREAK_TAGS = re.compile(r"<br\s*/?>|</tr\s*>", re.IGNORECASE)
@@ -23,6 +31,41 @@ _EXCESS_BLANK_LINES = re.compile(r"\n{3,}")
 
 class DocumentParserError(Exception):
     """Base error for document parsing failures."""
+
+
+class RawCorpusNotFoundError(DocumentParserError):
+    """Raised when the raw corpus JSON file cannot be found."""
+
+
+class RawCorpusFormatError(DocumentParserError):
+    """Raised when the raw corpus JSON file is malformed or has an unexpected shape."""
+
+
+@dataclass(frozen=True)
+class ThemeRange:
+    start: str
+    end: str
+    theme: str
+
+
+# Mirrors the theme ranges used by the corpus-loader branch to filter articles.
+# Ordered narrowest-first so that overlapping ranges (rupture_conventionnelle and
+# licenciement both sit inside contrat_travail's broad span) resolve to the most
+# specific theme rather than being swallowed by the broader one.
+THEME_RANGES: tuple[ThemeRange, ...] = (
+    ThemeRange("L1237-11", "L1237-19", theme="rupture_conventionnelle"),
+    ThemeRange("L1231-1", "L1237-20", theme="licenciement"),
+    ThemeRange("L1221-1", "L1248-11", theme="contrat_travail"),
+    ThemeRange("L3121-1", "L3121-36", theme="duree_travail"),
+    ThemeRange("L3141-1", "L3141-32", theme="conges_payes"),
+)
+
+
+@dataclass(frozen=True)
+class ParsedDocument:
+    id: str
+    text: str
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 def clean_html(raw_html: str) -> str:
@@ -37,3 +80,108 @@ def clean_html(raw_html: str) -> str:
     text = "\n".join(line.strip() for line in text.split("\n"))
     text = _EXCESS_BLANK_LINES.sub("\n\n", text)
     return text.strip()
+
+
+def determine_theme(num: str) -> str | None:
+    """Return the thematic section for an article number, or None if unrecognized."""
+
+    key = _parse_article_num(num)
+    if key is None:
+        return None
+
+    for theme_range in THEME_RANGES:
+        start_key = _parse_article_num(theme_range.start)
+        end_key = _parse_article_num(theme_range.end)
+        if key[0] == start_key[0] == end_key[0] and start_key[1:] <= key[1:] <= end_key[1:]:
+            return theme_range.theme
+
+    return None
+
+
+def _parse_article_num(num: str) -> tuple[str, int, tuple[int, ...]] | None:
+    if not isinstance(num, str):
+        return None
+
+    match = _ARTICLE_NUM_PATTERN.match(num.strip())
+    if not match:
+        return None
+
+    prefix, major, rest = match.groups()
+    rest_parts = tuple(int(part) for part in rest.split("-") if part)
+    return prefix.upper(), int(major), rest_parts
+
+
+def load_raw_articles(raw_data_dir: Path, filename: str = DEFAULT_RAW_FILENAME) -> list[dict[str, Any]]:
+    """Load the raw article list produced by the corpus-loader branch."""
+
+    path = raw_data_dir / filename
+    if not path.is_file():
+        raise RawCorpusNotFoundError(f"Raw corpus file not found: {path}")
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RawCorpusFormatError(f"Raw corpus file is not valid JSON: {path}") from exc
+
+    if not isinstance(payload, dict) or "articles" not in payload:
+        raise RawCorpusFormatError(f"Raw corpus file is missing the 'articles' key: {path}")
+
+    articles = payload["articles"]
+    if not isinstance(articles, list):
+        raise RawCorpusFormatError(f"'articles' must be a list in: {path}")
+
+    return articles
+
+
+def build_document(
+    article: Mapping[str, Any],
+    corpus_source: str | None,
+    corpus_date: str | None,
+) -> ParsedDocument | None:
+    """Build a ParsedDocument from one raw article, or None if it cannot be parsed."""
+
+    num = article.get("num")
+    if not isinstance(num, str) or not num.strip():
+        return None
+
+    content = article.get("content")
+    if not isinstance(content, str):
+        return None
+
+    text = clean_html(content)
+    if not text:
+        return None
+
+    section_path = article.get("section_path")
+    title = section_path[-1] if isinstance(section_path, list) and section_path else None
+
+    metadata = {
+        "num": num,
+        "legiarti": article.get("id"),
+        "theme": determine_theme(num),
+        "source": corpus_source,
+        "corpus_date": corpus_date,
+        "title": title,
+    }
+
+    return ParsedDocument(id=f"article-{num}", text=text, metadata=metadata)
+
+
+def parse_documents(
+    articles: list[Mapping[str, Any]],
+    corpus_source: str | None,
+    corpus_date: str | None,
+) -> tuple[list[ParsedDocument], list[dict[str, Any]]]:
+    """Build documents from raw articles, skipping malformed entries instead of failing."""
+
+    documents: list[ParsedDocument] = []
+    skipped: list[dict[str, Any]] = []
+
+    for article in articles:
+        document = build_document(article, corpus_source, corpus_date)
+        if document is None:
+            skipped.append({"num": article.get("num"), "id": article.get("id")})
+        else:
+            documents.append(document)
+
+    return documents, skipped
