@@ -44,12 +44,31 @@ Architecture generale cible, a enrichir au fil des branches :
 +-- prompts/
 +-- src/
 |   +-- config.py
+|   +-- chunking.py
 +-- tests/
 ```
 
 La configuration est centralisee dans `src/config.py`. Elle lit les variables
 d'environnement, expose des objets de configuration types et ne demarre aucun service
 externe.
+
+Le chunking est implemente dans `src/chunking.py`. Il recoit des documents deja
+normalises par la future branche `feature/document-parser` et ne lit pas directement
+le corpus brut.
+
+## Choix de conception
+
+### Granularite du chunking
+
+Les articles du Code du travail sont courts, denses et doivent rester citables. La
+strategie retenue est donc de conserver un article dans un seul chunk lorsqu'il tient
+dans la limite configuree. Cela maximise la tracabilite : le numero d'article reste
+associe a tout le texte transmis aux etapes suivantes.
+
+Si un article est trop long, il est decoupe a l'interieur de cet article, en priorite
+sur les paragraphes, puis sur les phrases, avec un leger chevauchement. Cette approche
+hybride evite de melanger plusieurs articles tout en gardant des chunks exploitables
+pour l'indexation vectorielle.
 
 ## Installation
 
@@ -70,7 +89,8 @@ Les cles API restent locales dans `.env` et ne doivent jamais etre commitees.
 ## Execution
 
 Les scripts d'indexation et d'interrogation seront ajoutes dans les prochaines branches.
-Pour l'instant, seule la configuration applicative est disponible.
+Pour l'instant, seules la configuration applicative et la brique de chunking sont
+disponibles.
 
 ## Workflow Git
 
