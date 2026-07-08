@@ -1,0 +1,7 @@
+chromadb
+groq
+pypdf
+python-dotenv
+requests
+sentence-transformers
+pytest
