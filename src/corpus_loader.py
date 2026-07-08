@@ -8,7 +8,9 @@ id/text/metadata contract; that stays the responsibility of the future
 
 from __future__ import annotations
 
+import re
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
@@ -22,6 +24,8 @@ LEGI_PART_ENDPOINT = f"{API_BASE_URL}/consult/legiPart"
 CODE_DU_TRAVAIL_TEXT_ID = "LEGITEXT000006072050"
 DEFAULT_REQUEST_TIMEOUT = 30
 TOKEN_EXPIRY_SAFETY_MARGIN = 30
+
+_ARTICLE_NUM_PATTERN = re.compile(r"^([A-Za-z]+)(\d+)((?:-\d+)*)$")
 
 
 class CorpusLoaderError(Exception):
@@ -164,3 +168,48 @@ def _build_article(article: Mapping[str, Any], section_path: list[str]) -> dict[
 
 def _today_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00Z")
+
+
+@dataclass(frozen=True)
+class ArticleRange:
+    start: str
+    end: str
+    theme: str
+
+
+THEME_RANGES: tuple[ArticleRange, ...] = (
+    ArticleRange("L3121-1", "L3121-36", theme="duree_travail"),
+    ArticleRange("L3141-1", "L3141-32", theme="conges_payes"),
+    ArticleRange("L1221-1", "L1248-11", theme="contrat_travail"),
+    ArticleRange("L1231-1", "L1237-20", theme="rupture_contrat"),
+    ArticleRange("L1237-11", "L1237-19", theme="rupture_conventionnelle"),
+)
+
+
+def is_article_in_scope(num: str) -> bool:
+    """Return True if an article number falls in one of the covered theme ranges."""
+
+    key = _parse_article_num(num)
+    if key is None:
+        return False
+
+    for article_range in THEME_RANGES:
+        start_key = _parse_article_num(article_range.start)
+        end_key = _parse_article_num(article_range.end)
+        if key[0] == start_key[0] == end_key[0] and start_key[1:] <= key[1:] <= end_key[1:]:
+            return True
+
+    return False
+
+
+def _parse_article_num(num: str) -> tuple[str, int, tuple[int, ...]] | None:
+    if not isinstance(num, str):
+        return None
+
+    match = _ARTICLE_NUM_PATTERN.match(num.strip())
+    if not match:
+        return None
+
+    prefix, major, rest = match.groups()
+    rest_parts = tuple(int(part) for part in rest.split("-") if part)
+    return prefix.upper(), int(major), rest_parts
