@@ -45,6 +45,7 @@ Architecture generale cible, a enrichir au fil des branches :
 +-- src/
 |   +-- config.py
 |   +-- chunking.py
+|   +-- prompting.py
 +-- tests/
 ```
 
@@ -55,6 +56,10 @@ externe.
 Le chunking est implemente dans `src/chunking.py`. Il recoit des documents deja
 normalises par la future branche `feature/document-parser` et ne lit pas directement
 le corpus brut.
+
+La preparation des prompts est isolee dans `src/prompting.py`. Elle assemble les
+messages systeme et utilisateur a partir d'une question et de chunks deja retrouves,
+sans appeler de modele LLM.
 
 ## Choix de conception
 
@@ -69,6 +74,18 @@ Si un article est trop long, il est decoupe a l'interieur de cet article, en pri
 sur les paragraphes, puis sur les phrases, avec un leger chevauchement. Cette approche
 hybride evite de melanger plusieurs articles tout en gardant des chunks exploitables
 pour l'indexation vectorielle.
+
+### Prompt et citations
+
+Le prompt impose de repondre uniquement a partir du contexte transmis par le retrieval.
+Chaque source est numerotee et affiche ses metadonnees, notamment le numero d'article
+quand il est disponible. Le LLM ne devra citer que les articles presents dans ce
+contexte.
+
+Le cas d'echec est explicite : si l'information n'est pas dans la base, la reponse doit
+indiquer "Je ne trouve pas cette information dans ma base." L'avertissement juridique
+obligatoire est injecte dans le prompt systeme et dans le message utilisateur pour
+reduire le risque d'oubli.
 
 ## Installation
 
@@ -89,8 +106,8 @@ Les cles API restent locales dans `.env` et ne doivent jamais etre commitees.
 ## Execution
 
 Les scripts d'indexation et d'interrogation seront ajoutes dans les prochaines branches.
-Pour l'instant, seules la configuration applicative et la brique de chunking sont
-disponibles.
+Pour l'instant, seules la configuration applicative, la brique de chunking et la
+preparation des prompts sont disponibles.
 
 ## Workflow Git
 
