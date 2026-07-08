@@ -49,5 +49,5 @@ def test_moderator_prompt_policy_is_externalized() -> None:
     prompt = read_moderator_prompt()
 
     assert "prompt injection" in prompt
-    assert "droit du travail francais" in prompt
-    assert "privilegie l'acceptation" in prompt
+    assert "droit du travail français" in prompt
+    assert "privilégie l'acceptation" in prompt
