@@ -92,6 +92,51 @@ Les scripts d'indexation et d'interrogation seront ajoutes dans les prochaines b
 Pour l'instant, seules la configuration applicative et la brique de chunking sont
 disponibles.
 
+## Document Parser (feature/document-parser)
+
+### Role
+
+`src/document_parser.py` lit le corpus brut produit par la branche `corpus-loader`
+(`data/raw/code_du_travail_raw.json`, un article par entree avec `num`, `id` LEGIARTI,
+`content` HTML et `section_path`) et le transforme en documents normalises au format
+`id`/`text`/`metadata` attendu par `chunking.py`. Il ne decoupe rien lui-meme : cette
+etape reste la responsabilite de `chunking.py`.
+
+### Nettoyage du HTML
+
+`clean_html()` retire les balises (`p`, `div`, `br`, `table`/`tr`/`td`/`th`, `a`, ...)
+sans dependance externe (regex + `html.unescape` de la bibliotheque standard), tout en
+preservant les coupures de paragraphes et de lignes de tableau pour garder un texte
+lisible, puis normalise les espaces superflus.
+
+### Identifiant et metadonnees
+
+- **Identifiant du document** : construit a partir du numero d'article (`article-L3121-1`),
+  stable et lisible pour la tracabilite des citations.
+- **Section thematique** : deduite du numero d'article via des plages calquees sur celles
+  du `corpus-loader`, evaluees de la plus specifique a la plus large pour que les plages
+  imbriquees (`rupture_conventionnelle` et `licenciement` sont toutes deux incluses dans
+  `contrat_travail`) resolvent vers le theme le plus precis :
+  - `L3121-1` a `L3121-36` : duree_travail
+  - `L3141-1` a `L3141-32` : conges_payes
+  - `L1237-11` a `L1237-19` : rupture_conventionnelle
+  - `L1231-1` a `L1237-20` : licenciement
+  - `L1221-1` a `L1248-11` : contrat_travail
+- **Autres champs** : `legiarti` (identifiant officiel), `source` et `corpus_date` (issus
+  de `config.corpus.source`/`config.corpus.date`), et `title` (derniere section du
+  `section_path`, si disponible).
+
+### Sortie et controle qualite
+
+Le resultat est ecrit dans `processed_data_dir` (`data/processed/code_du_travail_documents.json`)
+avec un horodatage de generation et le nombre d'articles ignores. Les articles sans `num`
+ou `content` exploitable (vide une fois nettoye) sont ignores individuellement, sans faire
+echouer l'ensemble du traitement ; un fichier source manquant ou un JSON malforme, en
+revanche, font echouer le traitement (`RawCorpusNotFoundError`, `RawCorpusFormatError`).
+
+Executer le module directement (`python src/document_parser.py`) affiche un echantillon
+aleatoire de 10 documents pour verification manuelle, comme demande par le sujet.
+
 ## Workflow Git
 
 Le projet suit le workflow enseigne dans le TP Scribe :
