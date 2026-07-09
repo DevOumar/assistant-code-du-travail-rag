@@ -51,7 +51,7 @@ def test_retrieve_maps_vector_results_to_retrieved_chunks(tmp_path: Path) -> Non
 
     query.assert_called_once_with(
         question="Quelle est la durée légale du travail ?",
-        top_k=3,
+        top_k=5,
         config=config,
     )
     assert chunks == [

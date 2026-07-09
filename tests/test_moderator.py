@@ -28,13 +28,15 @@ def test_moderator_blocks_prompt_injection() -> None:
 
     assert decision.status is ModerationStatus.BLOCKED
     assert any("prompt injection" in reason for reason in decision.reasons)
+    assert decision.confidence >= 0.9
 
 
 def test_moderator_blocks_out_of_scope_question() -> None:
     decision = InputModerator().moderate("Quelle recette de gateau au chocolat choisir ?")
 
     assert decision.status is ModerationStatus.BLOCKED
-    assert any("droit du travail" in reason for reason in decision.reasons)
+    assert any("hors périmètre" in reason for reason in decision.reasons)
+    assert decision.confidence >= 0.9
 
 
 def test_moderator_blocks_adjacent_corporate_question_without_labor_context() -> None:
@@ -67,4 +69,4 @@ def test_moderator_prompt_policy_is_externalized() -> None:
 
     assert "prompt injection" in prompt
     assert "droit du travail français" in prompt
-    assert "privilégie l'acceptation" in prompt
+    assert "Privilégie la conservation de la question" in prompt

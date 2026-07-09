@@ -25,7 +25,9 @@ class RagResponse:
     question: str
     answer: str
     sources: list[RetrievedChunk]
-    used_context: bool
+    scores: list[float | None] = field(default_factory=list)
+    top_k: int | None = None
+    used_context: bool = False
 
 
 class Retriever(Protocol):
@@ -55,6 +57,8 @@ class RagPipeline:
                 question=normalized_question,
                 answer=build_no_context_answer(self.legal_disclaimer),
                 sources=[],
+                scores=[],
+                top_k=self.top_k,
                 used_context=False,
             )
 
@@ -71,6 +75,8 @@ class RagPipeline:
             question=normalized_question,
             answer=answer,
             sources=retrieved_chunks,
+            scores=[chunk.score for chunk in retrieved_chunks],
+            top_k=self.top_k,
             used_context=True,
         )
 
