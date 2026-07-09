@@ -162,6 +162,7 @@ def build_document(
     title = section_path[-1] if isinstance(section_path, list) and section_path else None
 
     metadata = {
+        "article": num,
         "num": num,
         "legiarti": article.get("id"),
         "theme": determine_theme(num),
