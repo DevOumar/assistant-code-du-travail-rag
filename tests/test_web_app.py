@@ -4,6 +4,7 @@ from web_app import (
     UnavailablePipeline,
     _build_pipeline_or_fallback,
     build_corpus_status,
+    build_corpus_freshness,
     format_sources_markdown,
     QUESTION_PRESETS,
 )
@@ -52,6 +53,20 @@ def test_build_corpus_status_mentions_source_and_date() -> None:
 
     assert "Code du travail export Legifrance" in status
     assert "2026-07-08" in status
+
+
+def test_build_corpus_freshness_mentions_age_and_risk() -> None:
+    config = load_config(
+        env_file=None,
+        environ={
+            "CORPUS_DATE": "2026-07-08",
+        },
+    )
+
+    freshness = build_corpus_freshness(config)
+
+    assert "Fraîcheur" in freshness
+    assert "Risque" in freshness
 
 
 def test_build_pipeline_or_fallback_returns_concrete_pipeline(monkeypatch) -> None:

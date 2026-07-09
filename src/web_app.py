@@ -102,6 +102,34 @@ def build_corpus_status(config: AppConfig) -> str:
     return f"Corpus : {source} | Date : {corpus_date_str} | Âge : {age_text} | Risque d'obsolescence : {risk}"
 
 
+def build_corpus_freshness(config: AppConfig) -> str:
+    """Return only the freshness part of the corpus status."""
+
+    corpus_date_str = config.corpus.date
+
+    if not corpus_date_str:
+        return "Fraîcheur : non renseignée"
+
+    try:
+        corpus_date = datetime.fromisoformat(corpus_date_str).date()
+    except Exception:
+        return f"Fraîcheur : date invalide ({corpus_date_str})"
+
+    today = date.today()
+    delta = today - corpus_date
+    months = max(0, delta.days // 30)
+
+    if months <= 3:
+        risk = "Faible"
+    elif months <= 12:
+        risk = "Moyen"
+    else:
+        risk = "Élevé"
+
+    age_text = f"{months} mois" if months > 0 else "<1 mois"
+    return f"Fraîcheur : {age_text} | Risque : {risk}"
+
+
 def main() -> None:
     """Run the Streamlit application."""
 
@@ -130,17 +158,28 @@ def main() -> None:
         st.markdown(
             f"""
             <div class='sidebar-card'>
-                <div class='sidebar-card__label'>Corpus</div>
+                <div class='sidebar-card__label'>État du corpus</div>
                 <div class='sidebar-card__value'>{config.corpus.source or 'non renseigné'}</div>
-                <div class='sidebar-card__meta'>Date : {config.corpus.date or 'non renseignée'}</div>
-                <div class='sidebar-card__meta'>Top-k : {config.retrieval.top_k}</div>
-                <div class='sidebar-card__meta'>{build_corpus_status(config)}</div>
+                <div class='sidebar-card__grid'>
+                    <div class='sidebar-card__field'>
+                        <div class='sidebar-card__kicker'>Date du corpus</div>
+                        <div class='sidebar-card__meta'>{config.corpus.date or 'non renseignée'}</div>
+                    </div>
+                    <div class='sidebar-card__field'>
+                        <div class='sidebar-card__kicker'>Top-k</div>
+                        <div class='sidebar-card__meta'>{config.retrieval.top_k}</div>
+                    </div>
+                    <div class='sidebar-card__field sidebar-card__field--full'>
+                        <div class='sidebar-card__kicker'>Fraîcheur</div>
+                        <div class='sidebar-card__meta'>{build_corpus_freshness(config)}</div>
+                    </div>
+                </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        st.markdown("**Conversations**")
+        st.markdown("**▸ Conversations**")
         conversation_names = [item["name"] for item in st.session_state[CONVERSATIONS_KEY]]
         selected_name = st.radio(
             "Choisir une conversation",
@@ -163,7 +202,7 @@ def main() -> None:
                 st.rerun()
 
         st.divider()
-        st.markdown("**Thèmes couverts**")
+        st.markdown("**▸ Thèmes couverts**")
         st.markdown(
             """
             - Durée légale du travail
@@ -174,7 +213,7 @@ def main() -> None:
             """
         )
 
-        st.markdown("**Questions rapides**")
+        st.markdown("**▸ Questions rapides**")
         for preset in QUESTION_PRESETS:
             if st.button(preset, use_container_width=True, key=f"preset::{preset}"):
                 st.session_state[PRESET_QUESTION_KEY] = preset
@@ -315,10 +354,28 @@ def _inject_styles(st: object) -> None:
             color: #0f172a;
             margin-bottom: 0.15rem;
         }
+        .sidebar-card__grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.7rem 0.85rem;
+            margin-top: 0.65rem;
+        }
+        .sidebar-card__field--full {
+            grid-column: 1 / -1;
+        }
+        .sidebar-card__kicker {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 0.15rem;
+        }
         .sidebar-card__meta {
             font-size: 0.88rem;
             color: #475569;
             line-height: 1.45;
+            word-break: break-word;
         }
         .stButton button {
             border-radius: 0.95rem;
