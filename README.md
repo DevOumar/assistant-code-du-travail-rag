@@ -108,6 +108,11 @@ modifier sans toucher au code.
 utilise des interfaces injectées pour éviter de coupler le coeur RAG à ChromaDB ou à
 Groq.
 
+`src/retrieval.py` adapte les résultats ChromaDB au contrat attendu par le RAG. Il
+inclut une décomposition déterministe des questions composées : une question avec
+plusieurs idées est découpée en sous-questions, chaque sous-question est recherchée
+séparément, puis les chunks sont dédupliqués et réordonnés par score.
+
 `src/moderator.py` bloque les questions vides, les tentatives évidentes de prompt
 injection et les demandes hors périmètre du droit du travail français.
 

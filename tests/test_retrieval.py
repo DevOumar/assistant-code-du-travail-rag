@@ -8,8 +8,10 @@ from retrieval import (
     RetrievalError,
     RetrievedChunk,
     VectorStoreRetriever,
+    decompose_question,
     format_retrieved_chunks,
     retrieve,
+    retrieve_decomposed,
     retrieve_as_context,
 )
 from vector_store import VectorStoreError
@@ -87,6 +89,66 @@ def test_vector_store_retriever_matches_rag_pipeline_contract(tmp_path: Path) ->
     assert chunks[0].score == 0.87
     assert chunks[0].metadata["article"] == "L3121-27"
     assert chunks[0].metadata["chunk_id"] == "article-L3121-27::chunk-001"
+
+
+def test_decompose_question_splits_compound_labor_law_question() -> None:
+    sub_questions = decompose_question(
+        "Quelle est la duree legale du travail et quelles sont les regles des conges payes ?"
+    )
+
+    assert sub_questions == [
+        "Quelle est la duree legale du travail",
+        "les regles des conges payes",
+    ]
+
+
+def test_decompose_question_keeps_simple_question_unchanged() -> None:
+    assert decompose_question("Quelle est la duree du preavis ?") == [
+        "Quelle est la duree du preavis ?"
+    ]
+
+
+def test_retrieve_decomposed_queries_each_sub_question_and_deduplicates(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    first = [
+        {
+            "id": "article-L3121-27::chunk-001",
+            "text": "Duree legale.",
+            "metadata": {"article": "L3121-27"},
+            "distance": 0.2,
+            "similarity": 0.8,
+        }
+    ]
+    second = [
+        {
+            "id": "article-L3121-27::chunk-001",
+            "text": "Duree legale.",
+            "metadata": {"article": "L3121-27"},
+            "distance": 0.1,
+            "similarity": 0.9,
+        },
+        {
+            "id": "article-L3141-1::chunk-001",
+            "text": "Conges payes.",
+            "metadata": {"article": "L3141-1"},
+            "distance": 0.3,
+            "similarity": 0.7,
+        },
+    ]
+
+    with patch("retrieval.query_vector_database", side_effect=[first, second]) as query:
+        chunks = retrieve_decomposed(
+            "Quelle est la duree legale du travail et quelles sont les regles des conges payes ?",
+            top_k=3,
+            config=config,
+        )
+
+    assert query.call_count == 2
+    assert [chunk.chunk_id for chunk in chunks] == [
+        "article-L3121-27::chunk-001",
+        "article-L3141-1::chunk-001",
+    ]
+    assert chunks[0].similarity == 0.9
 
 
 def test_format_retrieved_chunks_displays_article_source_and_score() -> None:
