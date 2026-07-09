@@ -12,30 +12,35 @@ It does not load the corpus, does not chunk documents, and does not call the LLM
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-import chromadb
-from chromadb.api.models.Collection import Collection
-from sentence_transformers import SentenceTransformer
+from config import AppConfig, load_config
 
-from src.config import AppConfig, load_config
+if TYPE_CHECKING:
+    import chromadb
+    from chromadb.api.models.Collection import Collection
+    from sentence_transformers import SentenceTransformer
 
 
 class VectorStoreError(Exception):
     """Raised when the vector store receives invalid input."""
 
 
-def load_embedding_model(config: AppConfig | None = None) -> SentenceTransformer:
+def load_embedding_model(config: AppConfig | None = None) -> "SentenceTransformer":
     """Load the embedding model defined in the project configuration."""
+    from sentence_transformers import SentenceTransformer
+
     config = config or load_config()
     return SentenceTransformer(config.embedding.model_name)
 
 
-def get_chroma_client(config: AppConfig | None = None) -> chromadb.PersistentClient:
+def get_chroma_client(config: AppConfig | None = None) -> "chromadb.PersistentClient":
     """Create a persistent ChromaDB client.
 
     The database is stored on disk in config.paths.chroma_db_dir.
     """
+    import chromadb
+
     config = config or load_config()
     db_path: Path = config.paths.chroma_db_dir
     db_path.mkdir(parents=True, exist_ok=True)
@@ -43,7 +48,7 @@ def get_chroma_client(config: AppConfig | None = None) -> chromadb.PersistentCli
     return chromadb.PersistentClient(path=str(db_path))
 
 
-def get_or_create_collection(config: AppConfig | None = None) -> Collection:
+def get_or_create_collection(config: AppConfig | None = None) -> "Collection":
     """Load or create the configured ChromaDB collection."""
     config = config or load_config()
     client = get_chroma_client(config)
@@ -57,7 +62,7 @@ def get_or_create_collection(config: AppConfig | None = None) -> Collection:
     )
 
 
-def get_collection(config: AppConfig | None = None) -> Collection:
+def get_collection(config: AppConfig | None = None) -> "Collection":
     """Load an existing ChromaDB collection.
 
     This function must be used by retrieval code to avoid silently creating
@@ -143,12 +148,6 @@ def index_chunks(
     if not chunks:
         raise VectorStoreError("No chunks provided for indexing.")
 
-    if recreate:
-        reset_collection(config)
-
-    collection = get_or_create_collection(config)
-    model = load_embedding_model(config)
-
     ids: list[str] = []
     documents: list[str] = []
     metadatas: list[dict[str, str | int | float | bool]] = []
@@ -167,6 +166,12 @@ def index_chunks(
         ids.append(chunk_id)
         documents.append(text)
         metadatas.append(_sanitize_metadata(metadata))
+
+    if recreate:
+        reset_collection(config)
+
+    collection = get_or_create_collection(config)
+    model = load_embedding_model(config)
 
     embeddings = model.encode(
         documents,
