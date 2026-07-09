@@ -2,11 +2,11 @@ from config import LEGAL_DISCLAIMER, load_config
 from rag import RetrievedChunk
 from web_app import (
     UnavailablePipeline,
-    _build_pipeline_or_fallback,
-    build_corpus_status,
-    build_corpus_freshness,
-    format_sources_markdown,
     QUESTION_PRESETS,
+    _build_pipeline_or_fallback,
+    build_corpus_freshness,
+    build_corpus_status,
+    format_sources_markdown,
 )
 
 
@@ -108,4 +108,4 @@ def test_build_pipeline_or_fallback_keeps_ui_available(monkeypatch) -> None:
 def test_question_presets_cover_core_topics() -> None:
     assert len(QUESTION_PRESETS) >= 5
     assert any("durée légale du travail" in preset for preset in QUESTION_PRESETS)
-    assert any("fusion-acquisition" in preset for preset in QUESTION_PRESETS)
+    assert any("transfert d'entreprise" in preset for preset in QUESTION_PRESETS)
