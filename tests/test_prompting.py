@@ -18,7 +18,7 @@ def test_rendered_system_prompt_contains_project_constraints() -> None:
 
     assert "uniquement sur le contexte fourni" in prompt
     assert "N'invente jamais" in prompt
-    assert "Information not found in the knowledge base." in prompt
+    assert "Je suis un assistant spécialisé dans le droit du travail français" in prompt
     assert "2026-07-08" in prompt
     assert "Article : L3121-27" in prompt
     assert LEGAL_DISCLAIMER in prompt
@@ -67,7 +67,7 @@ def test_build_prompt_messages_formats_question_context_and_disclaimer() -> None
 def test_build_no_context_answer_contains_required_fallback_and_disclaimer() -> None:
     answer = build_no_context_answer()
 
-    assert "Information not found in the knowledge base." in answer
+    assert "Je suis un assistant spécialisé dans le droit du travail français" in answer
     assert LEGAL_DISCLAIMER in answer
 
 

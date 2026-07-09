@@ -75,7 +75,8 @@ def build_no_context_answer(legal_disclaimer: str = LEGAL_DISCLAIMER) -> str:
     """Return the required fallback answer when no retrieved context is available."""
 
     return (
-        "Information not found in the knowledge base.\n\n"
+        "Je suis un assistant spécialisé dans le droit du travail français, "
+        "mais je ne trouve pas d'information pertinente dans la base de connaissances pour cette question.\n\n"
         f"{legal_disclaimer}"
     )
 
