@@ -15,6 +15,11 @@ class FakePipeline:
         return self.response
 
 
+class FailingPipeline:
+    def answer(self, question: str) -> RagResponse:
+        raise RuntimeError("retrieval indisponible")
+
+
 def test_interactive_loop_answers_allowed_question_and_exits() -> None:
     inputs = iter(["Quelle est la duree du preavis pour un salarie en CDI ?", "exit"])
     outputs: list[str] = []
@@ -43,6 +48,7 @@ def test_interactive_loop_answers_allowed_question_and_exits() -> None:
     assert pipeline.questions == ["Quelle est la duree du preavis pour un salarie en CDI ?"]
     assert any("Reponse sourcee" in output for output in outputs)
     assert any("L1234-1" in output for output in outputs)
+    assert any("https://www.legifrance.gouv.fr/search/all?query=article+L1234-1" in output for output in outputs)
     assert outputs[-1] == "Fin de session."
 
 
@@ -81,3 +87,17 @@ def test_interactive_loop_rejects_too_long_question() -> None:
 
     assert pipeline.questions == []
     assert "Question trop longue. Reformulez votre demande." in outputs
+
+
+def test_interactive_loop_reports_pipeline_error_and_continues() -> None:
+    inputs = iter(["Quelle est la duree legale du travail ?", "exit"])
+    outputs: list[str] = []
+
+    run_interactive_loop(
+        pipeline=FailingPipeline(),
+        input_func=lambda _: next(inputs),
+        output_func=outputs.append,
+    )
+
+    assert any("Erreur du pipeline RAG" in output for output in outputs)
+    assert outputs[-1] == "Fin de session."

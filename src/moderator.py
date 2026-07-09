@@ -28,10 +28,32 @@ class ModerationDecision:
     status: ModerationStatus
     reasons: list[str] = field(default_factory=list)
     sanitized_question: str | None = None
+    confidence: float = 1.0
 
     @property
     def is_allowed(self) -> bool:
         return self.status is ModerationStatus.ALLOWED
+
+
+UNRELATED_TOPIC_KEYWORDS = (
+    "recette",
+    "cuisine",
+    "football",
+    "sport",
+    "match",
+    "cinema",
+    "film",
+    "voyage",
+    "vacances",
+    "restaurant",
+    "musique",
+    "politique",
+    "sante",
+    "medecin",
+    "voiture",
+    "internet",
+    "finance personnelle",
+)
 
 
 PROMPT_INJECTION_PATTERNS = (
@@ -43,6 +65,20 @@ PROMPT_INJECTION_PATTERNS = (
     r"\bdeveloper\s+message\b",
     r"\bsystem\s+message\b",
     r"\bjailbreak\b",
+)
+
+GREETINGS_PATTERNS = (
+    r"^(bonjour|bonsoir|salut|coucou|hello|hi)([!\.\?\s]*)$",
+    r"^(merci|merci beaucoup|merci bien|ok|d'accord|parfait)([!\.\?\s]*)$",
+    r"^(au revoir|aurevoir|bye)([!\.\?\s]*)$",
+)
+
+SMALL_TALK_PATTERNS = (
+    r"^(bonjour|bonsoir|salut|coucou|hello|hi)[,\s]*(comment\s+vas[-\s]*tu|ca\s+va|ça\s+va)?[!\.\?\s]*$",
+    r"^(comment\s+vas[-\s]*tu|ca\s+va|ça\s+va)[!\.\?\s]*$",
+    r"^(tu\s+fais\s+quoi|tu\s+es\s+qui|qui\s+es[-\s]*tu|que\s+fais[-\s]*tu|qu'est[-\s]*ce\s+que\s+tu\s+fais)[!\.\?\s]*$",
+    r"^(merci|merci beaucoup|merci bien|ok|d'accord|parfait|super|nickel)[!\.\?\s]*$",
+    r"^(au revoir|aurevoir|bye|a\s+bientot|à\s+bientôt)[!\.\?\s]*$",
 )
 
 LEGAL_SCOPE_KEYWORDS = (
@@ -102,6 +138,88 @@ OUT_OF_SCOPE_MESSAGE = (
 )
 
 
+def moderate_query(question: str, enforce_scope: bool = True) -> dict[str, object]:
+    """Classify a query for the labor-law RAG assistant.
+
+    Returns a soft decision with confidence and a reason. The function only
+    blocks clear prompt-injection attempts or questions manifestly outside the
+    labor-law domain.
+    """
+
+    normalized_question = _normalize_question(question)
+    if not normalized_question:
+        return {
+            "allowed": False,
+            "confidence": 0.0,
+            "reason": "Question vide ou uniquement constituée d'espaces.",
+        }
+
+    if _matches_any(normalized_question, PROMPT_INJECTION_PATTERNS):
+        return {
+            "allowed": False,
+            "confidence": 0.99,
+            "reason": "Tentative probable de prompt injection détectée.",
+        }
+
+    if not enforce_scope:
+        return {
+            "allowed": True,
+            "confidence": 0.65,
+            "reason": "Le contrôle du périmètre est désactivé : la question est autorisée.",
+        }
+
+    if _contains_any_keyword(normalized_question, UNRELATED_TOPIC_KEYWORDS) and not _contains_any_keyword(
+        normalized_question, LEGAL_SCOPE_KEYWORDS
+    ):
+        return {
+            "allowed": False,
+            "confidence": 0.90,
+            "reason": "Question clairement hors périmètre du droit du travail.",
+        }
+
+    if _is_adjacent_business_question(
+        normalized_question,
+        CORPORATE_FINANCE_KEYWORDS,
+        LABOR_CONTEXT_KEYWORDS,
+    ):
+        return {
+            "allowed": False,
+            "confidence": 0.80,
+            "reason": "Question d'entreprise sans lien explicite avec le droit du travail.",
+        }
+
+    if _contains_any_keyword(normalized_question, LEGAL_SCOPE_KEYWORDS):
+        return {
+            "allowed": True,
+            "confidence": 0.95,
+            "reason": "Question liée au droit du travail.",
+        }
+
+    return {
+        "allowed": True,
+        "confidence": 0.55,
+        "reason": "Question ambiguë, mais autorisée par sécurité.",
+    }
+
+
+def is_salutation(question: str) -> bool:
+    """Return True when the message is a greeting or a brief courtesy."""
+
+    return is_small_talk(question)
+
+
+def is_small_talk(question: str) -> bool:
+    """Return True when the message is a greeting, courtesy, or short chat."""
+
+    normalized_question = _normalize_question(question)
+    if not normalized_question:
+        return False
+
+    return _matches_any(normalized_question, SMALL_TALK_PATTERNS) or _matches_any(
+        normalized_question, GREETINGS_PATTERNS
+    )
+
+
 @dataclass(frozen=True)
 class InputModerator:
     scope_keywords: tuple[str, ...] = LEGAL_SCOPE_KEYWORDS
@@ -112,39 +230,29 @@ class InputModerator:
 
     def moderate(self, question: str) -> ModerationDecision:
         sanitized_question = _normalize_question(question)
-        reasons: list[str] = []
+        decision = moderate_query(question, enforce_scope=self.enforce_scope)
 
         if not sanitized_question:
             return ModerationDecision(
                 status=ModerationStatus.BLOCKED,
                 reasons=["La question est vide."],
                 sanitized_question=None,
+                confidence=0.0,
             )
 
-        if _matches_any(sanitized_question, self.injection_patterns):
-            reasons.append("Tentative probable de prompt injection.")
-
-        if self.enforce_scope:
-            if _is_adjacent_business_question(
-                sanitized_question,
-                self.adjacent_business_keywords,
-                self.labor_context_keywords,
-            ):
-                reasons.append(OUT_OF_SCOPE_MESSAGE)
-            elif not _contains_any_keyword(sanitized_question, self.scope_keywords):
-                reasons.append(OUT_OF_SCOPE_MESSAGE)
-
-        if reasons:
+        if decision["allowed"]:
             return ModerationDecision(
-                status=ModerationStatus.BLOCKED,
-                reasons=reasons,
+                status=ModerationStatus.ALLOWED,
+                reasons=[],
                 sanitized_question=sanitized_question,
+                confidence=float(decision["confidence"]),
             )
 
         return ModerationDecision(
-            status=ModerationStatus.ALLOWED,
-            reasons=[],
+            status=ModerationStatus.BLOCKED,
+            reasons=[str(decision["reason"])],
             sanitized_question=sanitized_question,
+            confidence=float(decision["confidence"]),
         )
 
 

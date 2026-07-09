@@ -183,13 +183,26 @@ def parse_documents(
 
     documents: list[ParsedDocument] = []
     skipped: list[dict[str, Any]] = []
+    seen_document_ids: set[str] = set()
 
     for article in articles:
         document = build_document(article, corpus_source, corpus_date)
         if document is None:
             skipped.append({"num": article.get("num"), "id": article.get("id")})
-        else:
-            documents.append(document)
+            continue
+
+        if document.id in seen_document_ids:
+            skipped.append(
+                {
+                    "num": article.get("num"),
+                    "id": article.get("id"),
+                    "reason": "duplicate document id",
+                }
+            )
+            continue
+
+        seen_document_ids.add(document.id)
+        documents.append(document)
 
     return documents, skipped
 

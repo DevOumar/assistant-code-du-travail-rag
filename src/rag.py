@@ -1,7 +1,7 @@
 """RAG orchestration layer.
 
-Concrete retrieval, vector database, and LLM clients are implemented in their
-own branches. This module wires those dependencies together through protocols.
+The pipeline wires retrieval and generation through protocols so the core RAG
+logic stays independent from ChromaDB and Groq implementation details.
 """
 
 from __future__ import annotations
@@ -10,7 +10,8 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from config import LEGAL_DISCLAIMER
-from prompting import PromptMessages, build_no_context_answer, build_prompt_messages
+from question_agents import QuestionFormatter
+from prompting import PromptMessages, build_no_context_answer, build_prompt_messages, build_small_talk_answer
 
 
 @dataclass(frozen=True)
@@ -25,7 +26,9 @@ class RagResponse:
     question: str
     answer: str
     sources: list[RetrievedChunk]
-    used_context: bool
+    scores: list[float | None] = field(default_factory=list)
+    top_k: int | None = None
+    used_context: bool = False
 
 
 class Retriever(Protocol):
@@ -42,19 +45,34 @@ class AnswerGenerator(Protocol):
 class RagPipeline:
     retriever: Retriever
     generator: AnswerGenerator
+    question_formatter: QuestionFormatter = field(default_factory=QuestionFormatter)
     top_k: int = 5
     corpus_date: str | None = None
     legal_disclaimer: str = LEGAL_DISCLAIMER
 
     def answer(self, question: str) -> RagResponse:
         normalized_question = _require_non_empty(question, "question")
-        retrieved_chunks = self.retriever.retrieve(normalized_question, top_k=self.top_k)
+        routing = self.question_formatter.format(normalized_question)
+
+        if routing.should_skip_retrieval:
+            return RagResponse(
+                question=normalized_question,
+                answer=build_small_talk_answer(self.legal_disclaimer),
+                sources=[],
+                scores=[],
+                top_k=self.top_k,
+                used_context=False,
+            )
+
+        retrieved_chunks = self.retriever.retrieve(routing.original_question, top_k=self.top_k)
 
         if not retrieved_chunks:
             return RagResponse(
                 question=normalized_question,
                 answer=build_no_context_answer(self.legal_disclaimer),
                 sources=[],
+                scores=[],
+                top_k=self.top_k,
                 used_context=False,
             )
 
@@ -71,6 +89,8 @@ class RagPipeline:
             question=normalized_question,
             answer=answer,
             sources=retrieved_chunks,
+            scores=[chunk.score for chunk in retrieved_chunks],
+            top_k=self.top_k,
             used_context=True,
         )
 

@@ -75,7 +75,18 @@ def build_no_context_answer(legal_disclaimer: str = LEGAL_DISCLAIMER) -> str:
     """Return the required fallback answer when no retrieved context is available."""
 
     return (
-        "Je ne trouve pas cette information dans ma base.\n\n"
+        "Je suis un assistant spécialisé dans le droit du travail français, "
+        "mais je ne trouve pas d'information pertinente dans la base de connaissances pour cette question.\n\n"
+        f"{legal_disclaimer}"
+    )
+
+
+def build_small_talk_answer(legal_disclaimer: str = LEGAL_DISCLAIMER) -> str:
+    """Return a polite answer for greetings or very short courtesy messages."""
+
+    return (
+        "Je suis un assistant spécialisé dans le droit du travail français. "
+        "Posez-moi une question juridique liée au Code du travail.\n\n"
         f"{legal_disclaimer}"
     )
 

@@ -38,11 +38,45 @@ def test_rag_pipeline_returns_fallback_when_no_context_is_found() -> None:
 
     assert response == RagResponse(
         question="Que dit le Code du travail sur ce sujet ?",
-        answer=f"Je ne trouve pas cette information dans ma base.\n\n{LEGAL_DISCLAIMER}",
+        answer=(
+            "Je suis un assistant spécialisé dans le droit du travail français, "
+            "mais je ne trouve pas d'information pertinente dans la base de connaissances pour cette question.\n\n"
+            f"{LEGAL_DISCLAIMER}"
+        ),
         sources=[],
+        scores=[],
+        top_k=3,
         used_context=False,
     )
     assert retriever.last_top_k == 3
+    assert generator.last_messages is None
+
+
+def test_rag_pipeline_returns_small_talk_answer_for_greeting() -> None:
+    retriever = FakeRetriever(chunks=[])
+    generator = FakeGenerator(answer="Cette reponse ne doit pas etre utilisee.")
+    pipeline = RagPipeline(retriever=retriever, generator=generator, top_k=3)
+
+    response = pipeline.answer("Bonjour !!")
+
+    assert "assistant spécialisé dans le droit du travail français" in response.answer
+    assert response.sources == []
+    assert response.used_context is False
+    assert retriever.last_question is None
+    assert generator.last_messages is None
+
+
+def test_rag_pipeline_returns_small_talk_answer_for_chatty_question() -> None:
+    retriever = FakeRetriever(chunks=[])
+    generator = FakeGenerator(answer="Cette reponse ne doit pas etre utilisee.")
+    pipeline = RagPipeline(retriever=retriever, generator=generator, top_k=3)
+
+    response = pipeline.answer("Tu fais quoi ?")
+
+    assert "assistant spécialisé dans le droit du travail français" in response.answer
+    assert response.sources == []
+    assert response.used_context is False
+    assert retriever.last_question is None
     assert generator.last_messages is None
 
 

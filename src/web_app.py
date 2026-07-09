@@ -1,21 +1,35 @@
-"""Streamlit chat interface for the legal RAG assistant.
-
-The concrete RAG pipeline is wired during final integration. Until then, this
-module provides the user-facing shell: chat history, moderation feedback, corpus
-metadata, source rendering, and legal disclaimer display.
-"""
+"""Streamlit chat interface for the legal RAG assistant."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from typing import Protocol
+from urllib.parse import quote_plus
 
 from config import AppConfig, LEGAL_DISCLAIMER, load_config
 from moderator import InputModerator
+from pipeline import build_rag_pipeline
+from prompting import build_small_talk_answer
+from question_agents import QuestionFormatter
 from rag import RagResponse, RetrievedChunk
 
 
-CHAT_HISTORY_KEY = "chat_messages"
+CONVERSATIONS_KEY = "conversations"
+CURRENT_CONVERSATION_INDEX_KEY = "current_conversation_index"
+PRESET_QUESTION_KEY = "preset_question"
+QUESTION_REFORMULATION_KEY = "question_reformulation"
+HYBRID_SEARCH_KEY = "hybrid_search"
+HYDE_KEY = "hyde"
+DECOMPOSITION_KEY = "decomposition"
+
+QUESTION_PRESETS = (
+    "Quelle est la durée légale du travail ?",
+    "Quels sont les congés payés acquis après un an de travail ?",
+    "Quel est le préavis en cas de démission d'un CDI ?",
+    "En cas de rupture conventionnelle, quelles indemnités sont dues ?",
+    "En cas de transfert d'entreprise, que devient le contrat de travail des salariés ?",
+)
 
 
 class AnsweringPipeline(Protocol):
@@ -32,18 +46,26 @@ class ChatMessage:
 
 @dataclass(frozen=True)
 class UnavailablePipeline:
-    """Temporary pipeline used before vector retrieval and LLM generation exist."""
+    """Fallback pipeline used when the vector database or LLM is unavailable."""
 
     legal_disclaimer: str = LEGAL_DISCLAIMER
 
     def answer(self, question: str) -> RagResponse:
+        routing = QuestionFormatter().format(question)
+        if routing.should_skip_retrieval:
+            return RagResponse(
+                question=question,
+                answer=build_small_talk_answer(self.legal_disclaimer),
+                sources=[],
+                used_context=False,
+            )
+
         return RagResponse(
             question=question,
             answer=(
-                "Le pipeline RAG complet n'est pas encore connecté. "
-                "Le chargement du corpus, la base vectorielle, le retrieval et "
-                "la génération finale doivent être intégrés avant de répondre "
-                "sur le fond.\n\n"
+                "Le pipeline RAG complet n'est pas disponible dans cette session. "
+                "Vérifiez la configuration, la clé Groq et l'indexation ChromaDB "
+                "avant de répondre sur le fond.\n\n"
                 f"{self.legal_disclaimer}"
             ),
             sources=[],
@@ -62,17 +84,79 @@ def format_sources_markdown(sources: list[RetrievedChunk]) -> str:
         article = source.metadata.get("article") or "article non renseigné"
         origin = source.metadata.get("source") or "source non renseignée"
         score = f" - score {source.score:.4f}" if source.score is not None else ""
-        lines.append(f"- [{index}] `{article}` - {origin}{score}")
+        source_url = _build_source_url(source)
+        if source_url:
+            lines.append(f"- [{index}] [`{article}`]({source_url}) - {origin}{score}")
+        else:
+            lines.append(f"- [{index}] `{article}` - {origin}{score}")
 
     return "\n".join(lines)
+
+
+def _build_source_url(source: RetrievedChunk) -> str | None:
+    article = str(source.metadata.get("article") or "").strip()
+    if not article:
+        return None
+
+    query = quote_plus(f"article {article}")
+    return f"https://www.legifrance.gouv.fr/search/all?query={query}"
 
 
 def build_corpus_status(config: AppConfig) -> str:
     """Return a concise status line about corpus freshness."""
 
     source = config.corpus.source or "source non renseignée"
-    date = config.corpus.date or "date non renseignée"
-    return f"Corpus : {source} | Date : {date}"
+    corpus_date_str = config.corpus.date
+
+    if not corpus_date_str:
+        return f"Corpus : {source} | Date : non renseignée"
+
+    try:
+        corpus_date = datetime.fromisoformat(corpus_date_str).date()
+    except Exception:
+        return f"Corpus : {source} | Date : {corpus_date_str}"
+
+    today = date.today()
+    delta = today - corpus_date
+    months = max(0, delta.days // 30)
+
+    if months <= 3:
+        risk = "Faible"
+    elif months <= 12:
+        risk = "Moyen"
+    else:
+        risk = "Élevé"
+
+    age_text = f"{months} mois" if months > 0 else "<1 mois"
+    return f"Corpus : {source} | Date : {corpus_date_str} | Âge : {age_text} | Risque d'obsolescence : {risk}"
+
+
+def build_corpus_freshness(config: AppConfig) -> str:
+    """Return only the freshness part of the corpus status."""
+
+    corpus_date_str = config.corpus.date
+
+    if not corpus_date_str:
+        return "Fraîcheur : non renseignée"
+
+    try:
+        corpus_date = datetime.fromisoformat(corpus_date_str).date()
+    except Exception:
+        return f"Fraîcheur : date invalide ({corpus_date_str})"
+
+    today = date.today()
+    delta = today - corpus_date
+    months = max(0, delta.days // 30)
+
+    if months <= 3:
+        risk = "Faible"
+    elif months <= 12:
+        risk = "Moyen"
+    else:
+        risk = "Élevé"
+
+    age_text = f"{months} mois" if months > 0 else "<1 mois"
+    return f"Fraîcheur : {age_text} | Risque : {risk}"
 
 
 def main() -> None:
@@ -82,38 +166,154 @@ def main() -> None:
 
     config = load_config()
     moderator = InputModerator()
-    pipeline = UnavailablePipeline(config.legal_disclaimer)
 
     st.set_page_config(
         page_title="Assistant Code du travail",
         layout="wide",
         initial_sidebar_state="expanded",
     )
+
     _inject_styles(st)
     _initialize_history(st)
 
     with st.sidebar:
-        st.title("Assistant")
-        st.caption(build_corpus_status(config))
-        st.caption(f"Top-k retrieval : {config.retrieval.top_k}")
+        st.markdown("<div class='sidebar-title'>Assistant Code du travail</div>", unsafe_allow_html=True)
+        st.caption("RAG documentaire et réponses sourcées")
+
+        if not config.llm.api_key:
+            st.warning("GROQ_API_KEY n'est pas définie.")
+
+        st.markdown(
+            f"""
+            <div class='sidebar-card'>
+                <div class='sidebar-card__label'>État du corpus</div>
+                <div class='sidebar-card__value'>{config.corpus.source or 'non renseigné'}</div>
+                <div class='sidebar-card__grid'>
+                    <div class='sidebar-card__field'>
+                        <div class='sidebar-card__kicker'>Date du corpus</div>
+                        <div class='sidebar-card__meta'>{config.corpus.date or 'non renseignée'}</div>
+                    </div>
+                    <div class='sidebar-card__field'>
+                        <div class='sidebar-card__kicker'>Top-k</div>
+                        <div class='sidebar-card__meta'>{config.retrieval.top_k}</div>
+                    </div>
+                    <div class='sidebar-card__field sidebar-card__field--full'>
+                        <div class='sidebar-card__kicker'>Fraîcheur</div>
+                        <div class='sidebar-card__meta'>{build_corpus_freshness(config)}</div>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown("**▸ Paramètres**")
+        st.caption("Active ou coupe les étapes du pipeline.")
+        if QUESTION_REFORMULATION_KEY not in st.session_state:
+            st.session_state[QUESTION_REFORMULATION_KEY] = True
+        if HYBRID_SEARCH_KEY not in st.session_state:
+            st.session_state[HYBRID_SEARCH_KEY] = bool(config.retrieval.enable_hybrid_search)
+        if HYDE_KEY not in st.session_state:
+            st.session_state[HYDE_KEY] = bool(config.retrieval.enable_hyde)
+        if DECOMPOSITION_KEY not in st.session_state:
+            st.session_state[DECOMPOSITION_KEY] = True
+
+        st.toggle(
+            "Recherche hybride",
+            help="Combine les résultats vectoriels avec une recherche lexicale légère sur le corpus préparé.",
+            key=HYBRID_SEARCH_KEY,
+        )
+        st.toggle(
+            "HyDE",
+            help="Génère une réponse hypothétique avant la recherche vectorielle.",
+            key=HYDE_KEY,
+        )
+        st.toggle(
+            "Décomposition",
+            help="Découpe les questions composées en sous-questions atomiques.",
+            key=DECOMPOSITION_KEY,
+        )
+        st.toggle(
+            "Reformulation",
+            help="Nettoie la question avant recherche et retire les formulations parasites.",
+            key=QUESTION_REFORMULATION_KEY,
+        )
+
+        pipeline: AnsweringPipeline = _build_pipeline_or_fallback(
+            config,
+            decompose=st.session_state[DECOMPOSITION_KEY],
+            enable_hyde=st.session_state[HYDE_KEY],
+            enable_hybrid_search=st.session_state[HYBRID_SEARCH_KEY],
+            enable_reformulation=st.session_state[QUESTION_REFORMULATION_KEY],
+        )
+
+        st.markdown("**▸ Conversations**")
+        conversation_names = [item["name"] for item in st.session_state[CONVERSATIONS_KEY]]
+        selected_name = st.radio(
+            "Choisir une conversation",
+            conversation_names,
+            index=st.session_state[CURRENT_CONVERSATION_INDEX_KEY],
+            label_visibility="collapsed",
+        )
+        st.session_state[CURRENT_CONVERSATION_INDEX_KEY] = conversation_names.index(selected_name)
+
+        col_new, col_clear = st.columns(2)
+        with col_new:
+            if st.button("Nouvelle", use_container_width=True):
+                _create_new_conversation(st)
+                st.rerun()
+        with col_clear:
+            if st.button("Vider", use_container_width=True):
+                st.session_state[CONVERSATIONS_KEY][st.session_state[CURRENT_CONVERSATION_INDEX_KEY]][
+                    "messages"
+                ] = []
+                st.rerun()
+
         st.divider()
-        st.caption(config.legal_disclaimer)
-        if st.button("Nouvelle conversation", use_container_width=True):
-            st.session_state[CHAT_HISTORY_KEY] = []
-            st.rerun()
+        st.markdown("**▸ Thèmes couverts**")
+        st.markdown(
+            """
+            - Durée légale du travail
+            - Congés payés et acquisition
+            - Préavis en CDI
+            - Rupture conventionnelle
+            - Transfert d'entreprise et contrat de travail
+            """
+        )
+
+        st.markdown("**▸ Questions rapides**")
+        for preset in QUESTION_PRESETS:
+            if st.button(preset, use_container_width=True, key=f"preset::{preset}"):
+                st.session_state[PRESET_QUESTION_KEY] = preset
+                st.rerun()
+
+        st.markdown(
+            """
+            <div class='legal-badge'>
+                Cet assistant ne fournit pas de conseil juridique.
+                Consultez un avocat ou l'inspection du travail pour votre situation personnelle.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     st.title("Assistant Code du travail")
     st.caption("Posez une question sur le droit du travail français.")
 
-    for message in st.session_state[CHAT_HISTORY_KEY]:
+    current_messages = st.session_state[CONVERSATIONS_KEY][st.session_state[CURRENT_CONVERSATION_INDEX_KEY]][
+        "messages"
+    ]
+    for message in current_messages:
         _render_message(st, message)
 
-    question = st.chat_input("Exemple : Quelle est la durée légale du travail ?")
+    question = st.session_state.pop(PRESET_QUESTION_KEY, None)
+    if question is None:
+        question = st.chat_input("Exemple : Quelle est la durée légale du travail ?")
     if not question:
         return
 
     user_message = ChatMessage(role="user", content=question)
-    st.session_state[CHAT_HISTORY_KEY].append(user_message)
+    current_messages.append(user_message)
     _render_message(st, user_message)
 
     decision = moderator.moderate(question)
@@ -123,20 +323,66 @@ def main() -> None:
         )
         assistant_message = ChatMessage(role="assistant", content=answer)
     else:
-        response = pipeline.answer(decision.sanitized_question or question)
-        assistant_message = ChatMessage(
-            role="assistant",
-            content=response.answer,
-            sources=response.sources,
-        )
+        try:
+            response = pipeline.answer(decision.sanitized_question or question)
+            assistant_message = ChatMessage(
+                role="assistant",
+                content=response.answer,
+                sources=response.sources,
+            )
+        except Exception as exc:
+            assistant_message = ChatMessage(
+                role="assistant",
+                content=(
+                    "Le pipeline RAG n'est pas prêt pour répondre à cette question. "
+                    f"Détail technique : {exc}"
+                ),
+            )
 
-    st.session_state[CHAT_HISTORY_KEY].append(assistant_message)
+    current_messages.append(assistant_message)
     _render_message(st, assistant_message)
 
 
+def _build_pipeline_or_fallback(
+    config: AppConfig,
+    *,
+    decompose: bool | None = None,
+    enable_hyde: bool | None = None,
+    enable_hybrid_search: bool | None = None,
+    enable_reformulation: bool | None = None,
+) -> AnsweringPipeline:
+    try:
+        return build_rag_pipeline(
+            config,
+            decompose=decompose,
+            enable_hyde=enable_hyde,
+            enable_hybrid_search=enable_hybrid_search,
+            enable_reformulation=enable_reformulation,
+        )
+    except Exception:
+        return UnavailablePipeline(config.legal_disclaimer)
+
+
 def _initialize_history(st: object) -> None:
-    if CHAT_HISTORY_KEY not in st.session_state:
-        st.session_state[CHAT_HISTORY_KEY] = []
+    if CONVERSATIONS_KEY not in st.session_state:
+        st.session_state[CONVERSATIONS_KEY] = []
+    if CURRENT_CONVERSATION_INDEX_KEY not in st.session_state:
+        st.session_state[CURRENT_CONVERSATION_INDEX_KEY] = 0
+
+    if not st.session_state[CONVERSATIONS_KEY]:
+        st.session_state[CONVERSATIONS_KEY].append({"name": "Conversation 1", "messages": []})
+
+    current_index = st.session_state[CURRENT_CONVERSATION_INDEX_KEY]
+    if current_index >= len(st.session_state[CONVERSATIONS_KEY]):
+        st.session_state[CURRENT_CONVERSATION_INDEX_KEY] = len(st.session_state[CONVERSATIONS_KEY]) - 1
+
+
+def _create_new_conversation(st: object) -> None:
+    conversation_count = len(st.session_state[CONVERSATIONS_KEY])
+    st.session_state[CONVERSATIONS_KEY].append(
+        {"name": f"Conversation {conversation_count + 1}", "messages": []}
+    )
+    st.session_state[CURRENT_CONVERSATION_INDEX_KEY] = conversation_count
 
 
 def _render_message(st: object, message: ChatMessage) -> None:
@@ -156,11 +402,78 @@ def _inject_styles(st: object) -> None:
             padding-top: 2rem;
         }
         [data-testid="stChatMessage"] {
-            border-radius: 8px;
-            padding: 0.25rem 0.1rem;
+            border-radius: 12px;
+            padding: 0.6rem 0.8rem;
         }
         [data-testid="stChatInput"] textarea {
-            border-radius: 8px;
+            border-radius: 12px;
+        }
+        .sidebar-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 0.15rem;
+        }
+        .sidebar-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 0.95rem 1rem;
+            margin: 0.75rem 0 1rem;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+        }
+        .sidebar-card__label {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #64748b;
+            margin-bottom: 0.35rem;
+        }
+        .sidebar-card__value {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 0.15rem;
+        }
+        .sidebar-card__grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.7rem 0.85rem;
+            margin-top: 0.65rem;
+        }
+        .sidebar-card__field--full {
+            grid-column: 1 / -1;
+        }
+        .sidebar-card__kicker {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 0.15rem;
+        }
+        .sidebar-card__meta {
+            font-size: 0.88rem;
+            color: #475569;
+            line-height: 1.45;
+            word-break: break-word;
+        }
+        .stButton button {
+            border-radius: 0.95rem;
+        }
+        .stSidebar .block-container {
+            padding-top: 1rem;
+        }
+        .legal-badge {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-left: 4px solid #0f172a;
+            border-radius: 14px;
+            padding: 0.9rem 1rem;
+            color: #334155;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            margin-top: 1rem;
         }
         </style>
         """,
@@ -170,3 +483,4 @@ def _inject_styles(st: object) -> None:
 
 if __name__ == "__main__":
     main()
+

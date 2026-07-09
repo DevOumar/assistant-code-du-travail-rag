@@ -15,6 +15,8 @@ def test_load_config_uses_safe_defaults() -> None:
     assert config.paths.prompts_dir == PROJECT_ROOT / "prompts"
     assert config.embedding.collection_name == "code_du_travail"
     assert config.retrieval.top_k == 5
+    assert config.retrieval.enable_hyde is False
+    assert config.retrieval.enable_hybrid_search is False
     assert config.llm.provider == "groq"
     assert config.llm.temperature == 0.2
     assert config.llm.api_key is None
@@ -32,6 +34,8 @@ def test_load_config_reads_environment_overrides(tmp_path: Path) -> None:
             "RAW_DATA_DIR": str(raw_dir),
             "PROCESSED_DATA_DIR": str(processed_dir),
             "RETRIEVAL_TOP_K": "8",
+            "RETRIEVAL_ENABLE_HYDE": "true",
+            "RETRIEVAL_ENABLE_HYBRID_SEARCH": "true",
             "GROQ_API_KEY": "test-secret",
             "GROQ_TEMPERATURE": "0.1",
             "CORPUS_SOURCE": "legi-data",
@@ -43,6 +47,8 @@ def test_load_config_reads_environment_overrides(tmp_path: Path) -> None:
     assert config.paths.raw_data_dir == raw_dir.resolve()
     assert config.paths.processed_data_dir == processed_dir.resolve()
     assert config.retrieval.top_k == 8
+    assert config.retrieval.enable_hyde is True
+    assert config.retrieval.enable_hybrid_search is True
     assert config.llm.api_key == "test-secret"
     assert config.llm.temperature == 0.1
     assert config.corpus.source == "legi-data"
