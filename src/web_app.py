@@ -17,6 +17,10 @@ from rag import RagResponse, RetrievedChunk
 CONVERSATIONS_KEY = "conversations"
 CURRENT_CONVERSATION_INDEX_KEY = "current_conversation_index"
 PRESET_QUESTION_KEY = "preset_question"
+QUESTION_REFORMULATION_KEY = "question_reformulation"
+HYBRID_SEARCH_KEY = "hybrid_search"
+HYDE_KEY = "hyde"
+DECOMPOSITION_KEY = "decomposition"
 
 QUESTION_PRESETS = (
     "Quelle est la durée légale du travail ?",
@@ -148,7 +152,6 @@ def main() -> None:
 
     config = load_config()
     moderator = InputModerator()
-    pipeline: AnsweringPipeline = _build_pipeline_or_fallback(config)
 
     st.set_page_config(
         page_title="Assistant Code du travail",
@@ -190,7 +193,47 @@ def main() -> None:
             unsafe_allow_html=True,
         )
 
-        st.markdown("**▸ Conversations**")
+        st.markdown("**▸ Paramètres**")
+        st.caption("Active ou coupe les étapes du pipeline.")
+        if QUESTION_REFORMULATION_KEY not in st.session_state:
+            st.session_state[QUESTION_REFORMULATION_KEY] = True
+        if HYBRID_SEARCH_KEY not in st.session_state:
+            st.session_state[HYBRID_SEARCH_KEY] = bool(config.retrieval.enable_hybrid_search)
+        if HYDE_KEY not in st.session_state:
+            st.session_state[HYDE_KEY] = bool(config.retrieval.enable_hyde)
+        if DECOMPOSITION_KEY not in st.session_state:
+            st.session_state[DECOMPOSITION_KEY] = True
+
+        st.toggle(
+            "Recherche hybride",
+            help="Combine les résultats vectoriels avec une recherche lexicale légère sur le corpus préparé.",
+            key=HYBRID_SEARCH_KEY,
+        )
+        st.toggle(
+            "HyDE",
+            help="Génère une réponse hypothétique avant la recherche vectorielle.",
+            key=HYDE_KEY,
+        )
+        st.toggle(
+            "Décomposition",
+            help="Découpe les questions composées en sous-questions atomiques.",
+            key=DECOMPOSITION_KEY,
+        )
+        st.toggle(
+            "Reformulation",
+            help="Nettoie la question avant recherche et retire les formulations parasites.",
+            key=QUESTION_REFORMULATION_KEY,
+        )
+
+        pipeline: AnsweringPipeline = _build_pipeline_or_fallback(
+            config,
+            decompose=st.session_state[DECOMPOSITION_KEY],
+            enable_hyde=st.session_state[HYDE_KEY],
+            enable_hybrid_search=st.session_state[HYBRID_SEARCH_KEY],
+            enable_reformulation=st.session_state[QUESTION_REFORMULATION_KEY],
+        )
+
+        st.markdown("**â–¸ Conversations**")
         conversation_names = [item["name"] for item in st.session_state[CONVERSATIONS_KEY]]
         selected_name = st.radio(
             "Choisir une conversation",
@@ -286,9 +329,22 @@ def main() -> None:
     _render_message(st, assistant_message)
 
 
-def _build_pipeline_or_fallback(config: AppConfig) -> AnsweringPipeline:
+def _build_pipeline_or_fallback(
+    config: AppConfig,
+    *,
+    decompose: bool | None = None,
+    enable_hyde: bool | None = None,
+    enable_hybrid_search: bool | None = None,
+    enable_reformulation: bool | None = None,
+) -> AnsweringPipeline:
     try:
-        return build_rag_pipeline(config)
+        return build_rag_pipeline(
+            config,
+            decompose=decompose,
+            enable_hyde=enable_hyde,
+            enable_hybrid_search=enable_hybrid_search,
+            enable_reformulation=enable_reformulation,
+        )
     except Exception:
         return UnavailablePipeline(config.legal_disclaimer)
 

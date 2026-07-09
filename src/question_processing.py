@@ -50,7 +50,7 @@ class QuestionPreparation:
 
 
 def prepare_question(question: str, max_atomic_questions: int = 4) -> QuestionPreparation:
-    original = _normalize_question(question)
+    original = normalize_question(question)
     if not original:
         return QuestionPreparation(
             original_question="",
@@ -72,7 +72,7 @@ def prepare_question(question: str, max_atomic_questions: int = 4) -> QuestionPr
 def strip_parasitic_phrases(question: str) -> tuple[str, list[str]]:
     """Remove polite filler phrases and verbal noise from a user question."""
 
-    cleaned = _normalize_question(question)
+    cleaned = normalize_question(question)
     removed: list[str] = []
 
     previous = None
@@ -95,14 +95,14 @@ def strip_parasitic_phrases(question: str) -> tuple[str, list[str]]:
             removed.append("fillers")
             cleaned = new_value
 
-    cleaned = _normalize_question(cleaned)
+    cleaned = normalize_question(cleaned)
     return cleaned, [fragment for fragment in removed if fragment]
 
 
 def split_atomic_questions(question: str, max_atomic_questions: int = 4) -> list[str]:
     """Split a composite question into atomic retrieval queries."""
 
-    normalized = _normalize_question(question)
+    normalized = normalize_question(question)
     if not normalized:
         return []
 
@@ -119,7 +119,7 @@ def split_atomic_questions(question: str, max_atomic_questions: int = 4) -> list
     return unique[:max_atomic_questions]
 
 
-def _normalize_question(question: str) -> str:
+def normalize_question(question: str) -> str:
     return re.sub(r"\s+", " ", question).strip()
 
 

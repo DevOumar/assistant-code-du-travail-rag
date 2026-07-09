@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -80,6 +81,36 @@ def test_retrieve_cleans_parasitic_prefixes_before_search(tmp_path: Path) -> Non
         top_k=5,
         config=config,
     )
+
+
+def test_retrieve_can_use_hybrid_search_when_enabled(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    processed_dir = config.paths.processed_data_dir
+    processed_dir.mkdir(parents=True, exist_ok=True)
+    (processed_dir / "code_du_travail_documents.json").write_text(
+        json.dumps(
+            {
+                "documents": [
+                    {
+                        "id": "article-L3121-27",
+                        "text": "La duree legale du travail effectif est fixee a trente-cinq heures.",
+                        "metadata": {"article": "L3121-27", "source": "Legifrance"},
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with patch("retrieval.query_vector_database", return_value=[]):
+        chunks = retrieve(
+            "Quelle est la duree legale du travail ?",
+            config=config,
+            enable_hybrid_search=True,
+        )
+
+    assert len(chunks) == 1
+    assert chunks[0].metadata["article"] == "L3121-27"
 
 
 def test_retrieve_rejects_empty_question(tmp_path: Path) -> None:

@@ -51,6 +51,7 @@ class RetrievalConfig:
     enable_reranking: bool = False
     reranker_model_name: str | None = None
     enable_hyde: bool = False
+    enable_hybrid_search: bool = False
 
 
 @dataclass(frozen=True)
@@ -122,6 +123,7 @@ def load_config(
         enable_reranking=_boolean(source, "RETRIEVAL_ENABLE_RERANKING", False),
         reranker_model_name=_optional(source, "RETRIEVAL_RERANKER_MODEL_NAME"),
         enable_hyde=_boolean(source, "RETRIEVAL_ENABLE_HYDE", False),
+        enable_hybrid_search=_boolean(source, "RETRIEVAL_ENABLE_HYBRID_SEARCH", False),
     )
 
     llm = LlmConfig(

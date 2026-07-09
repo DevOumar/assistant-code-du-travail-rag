@@ -10,8 +10,8 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from config import LEGAL_DISCLAIMER
-from prompting import PromptMessages, build_no_context_answer, build_prompt_messages, build_small_talk_answer
 from question_agents import QuestionFormatter
+from prompting import PromptMessages, build_no_context_answer, build_prompt_messages, build_small_talk_answer
 
 
 @dataclass(frozen=True)
@@ -45,13 +45,14 @@ class AnswerGenerator(Protocol):
 class RagPipeline:
     retriever: Retriever
     generator: AnswerGenerator
+    question_formatter: QuestionFormatter = field(default_factory=QuestionFormatter)
     top_k: int = 5
     corpus_date: str | None = None
     legal_disclaimer: str = LEGAL_DISCLAIMER
 
     def answer(self, question: str) -> RagResponse:
         normalized_question = _require_non_empty(question, "question")
-        routing = QuestionFormatter().format(normalized_question)
+        routing = self.question_formatter.format(normalized_question)
 
         if routing.should_skip_retrieval:
             return RagResponse(
@@ -63,7 +64,7 @@ class RagPipeline:
                 used_context=False,
             )
 
-        retrieved_chunks = self.retriever.retrieve(routing.cleaned_question, top_k=self.top_k)
+        retrieved_chunks = self.retriever.retrieve(routing.original_question, top_k=self.top_k)
 
         if not retrieved_chunks:
             return RagResponse(

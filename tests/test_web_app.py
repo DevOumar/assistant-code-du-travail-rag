@@ -89,7 +89,7 @@ def test_build_pipeline_or_fallback_returns_concrete_pipeline(monkeypatch) -> No
     config = load_config(env_file=None, environ={"GROQ_API_KEY": "test-key"})
     concrete_pipeline = object()
 
-    monkeypatch.setattr("web_app.build_rag_pipeline", lambda config: concrete_pipeline)
+    monkeypatch.setattr("web_app.build_rag_pipeline", lambda config, **kwargs: concrete_pipeline)
 
     assert _build_pipeline_or_fallback(config) is concrete_pipeline
 
