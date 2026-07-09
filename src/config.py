@@ -50,6 +50,7 @@ class RetrievalConfig:
     similarity_threshold: float = 0.20
     enable_reranking: bool = False
     reranker_model_name: str | None = None
+    enable_hyde: bool = False
 
 
 @dataclass(frozen=True)
@@ -120,6 +121,7 @@ def load_config(
         similarity_threshold=_floating(source, "RETRIEVAL_SIMILARITY_THRESHOLD", 0.20, minimum=0.0, maximum=1.0),
         enable_reranking=_boolean(source, "RETRIEVAL_ENABLE_RERANKING", False),
         reranker_model_name=_optional(source, "RETRIEVAL_RERANKER_MODEL_NAME"),
+        enable_hyde=_boolean(source, "RETRIEVAL_ENABLE_HYDE", False),
     )
 
     llm = LlmConfig(

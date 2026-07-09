@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from config import AppConfig, load_config
+from hyde import HyDEGenerationError, build_hyde_search_document
+from question_processing import prepare_question
 from rag import RetrievedChunk as RagRetrievedChunk
 from vector_store import VectorStoreError, query_vector_database
 
@@ -117,7 +119,8 @@ def retrieve(
 
     active_config = config or load_config()
 
-    if not question or not question.strip():
+    prepared = prepare_question(question)
+    if not prepared.cleaned_question:
         raise RetrievalError("Question cannot be empty.")
 
     active_top_k = _effective_top_k(active_config, top_k)
@@ -125,7 +128,7 @@ def retrieve(
 
     try:
         raw_results = query_vector_database(
-            question=question.strip(),
+            question=prepared.cleaned_question,
             top_k=active_top_k,
             config=active_config,
         )
@@ -139,7 +142,7 @@ def retrieve(
         if candidate.similarity is not None and candidate.similarity >= similarity_threshold
     ]
 
-    ranked = rerank_documents(question=question, documents=filtered, config=active_config)
+    ranked = rerank_documents(question=prepared.cleaned_question, documents=filtered, config=active_config)
     return ranked
 
 
@@ -160,37 +163,31 @@ def retrieve_decomposed(
 
     active_config = config or load_config()
     active_top_k = top_k or active_config.retrieval.top_k
-    sub_questions = decompose_question(question, max_sub_questions=max_sub_questions)
+    preparation = prepare_question(question, max_atomic_questions=max_sub_questions)
+    sub_questions = preparation.atomic_questions
 
     candidates: list[RetrievedChunk] = []
     for sub_question in sub_questions:
         candidates.extend(retrieve(sub_question, top_k=active_top_k, config=active_config))
+        if active_config.retrieval.enable_hyde:
+            candidates.extend(
+                _retrieve_with_hyde_expansion(
+                    sub_question=sub_question,
+                    top_k=active_top_k,
+                    config=active_config,
+                )
+            )
 
     return _deduplicate_chunks(candidates)[:active_top_k]
 
 
 def decompose_question(question: str, max_sub_questions: int = 4) -> list[str]:
-    """Split a compound user question into atomic retrieval queries.
+    """Split a compound user question into atomic retrieval queries."""
 
-    This is intentionally deterministic: it improves retrieval recall without adding
-    an extra LLM call before every question.
-    """
-
-    normalized = _normalize_question(question)
-    if not normalized:
+    preparation = prepare_question(question, max_atomic_questions=max_sub_questions)
+    if not preparation.cleaned_question:
         raise RetrievalError("Question cannot be empty.")
-
-    parts = [
-        _clean_sub_question(part)
-        for part in _QUESTION_SPLIT_PATTERN.split(normalized)
-        if _clean_sub_question(part)
-    ]
-
-    filtered = _deduplicate_strings(part for part in parts if _is_informative_sub_question(part))
-    if len(filtered) < 2:
-        return [normalized]
-
-    return filtered[:max_sub_questions]
+    return preparation.atomic_questions
 
 
 def format_retrieved_chunks(chunks: list[RetrievedChunk]) -> str:
@@ -268,32 +265,6 @@ _QUESTION_SPLIT_PATTERN = re.compile(
 )
 
 
-def _normalize_question(question: str) -> str:
-    return re.sub(r"\s+", " ", question).strip()
-
-
-def _clean_sub_question(text: str) -> str:
-    cleaned = text.strip(" ,.:;?-")
-    cleaned = re.sub(r"\s+", " ", cleaned)
-    return cleaned.strip()
-
-
-def _is_informative_sub_question(text: str) -> bool:
-    return len(text) >= 12 and len(text.split()) >= 2
-
-
-def _deduplicate_strings(values: Any) -> list[str]:
-    seen: set[str] = set()
-    unique: list[str] = []
-    for value in values:
-        key = value.casefold()
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(value)
-    return unique
-
-
 def _deduplicate_chunks(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
     by_key: dict[str, RetrievedChunk] = {}
 
@@ -317,6 +288,31 @@ def _score(chunk: RetrievedChunk) -> float:
     if chunk.distance is not None:
         return 1 - chunk.distance
     return 0.0
+
+
+def _retrieve_with_hyde_expansion(
+    sub_question: str,
+    top_k: int,
+    config: AppConfig,
+) -> list[RetrievedChunk]:
+    try:
+        hypothetical_document = build_hyde_search_document(sub_question, config=config)
+    except HyDEGenerationError:
+        return []
+
+    if not hypothetical_document.strip():
+        return []
+
+    try:
+        raw_results = query_vector_database(
+            question=hypothetical_document,
+            top_k=top_k,
+            config=config,
+        )
+    except VectorStoreError as exc:
+        raise RetrievalError(str(exc)) from exc
+
+    return [_to_retrieved_chunk(item) for item in raw_results]
 
 
 def main() -> None:
