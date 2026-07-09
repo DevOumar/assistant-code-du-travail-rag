@@ -48,6 +48,7 @@ def test_interactive_loop_answers_allowed_question_and_exits() -> None:
     assert pipeline.questions == ["Quelle est la duree du preavis pour un salarie en CDI ?"]
     assert any("Reponse sourcee" in output for output in outputs)
     assert any("L1234-1" in output for output in outputs)
+    assert any("https://www.legifrance.gouv.fr/search/all?query=article+L1234-1" in output for output in outputs)
     assert outputs[-1] == "Fin de session."
 
 

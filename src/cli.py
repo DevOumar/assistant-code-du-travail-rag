@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Callable, Protocol
+from urllib.parse import quote_plus
 
 from moderator import InputModerator
 from pipeline import PipelineBuildError, build_rag_pipeline
@@ -84,7 +85,20 @@ def _format_source(index: int, source: RetrievedChunk) -> str:
     article = source.metadata.get("article") or "article non renseigne"
     origin = source.metadata.get("source") or "source non renseignee"
     score = f", score={source.score:.4f}" if source.score is not None else ""
+    url = _build_source_url(article)
+    if url:
+        return f"- [{index}] {article} ({origin}{score}) - {url}"
+
     return f"- [{index}] {article} ({origin}{score})"
+
+
+def _build_source_url(article: str) -> str | None:
+    cleaned_article = article.strip()
+    if not cleaned_article:
+        return None
+
+    query = quote_plus(f"article {cleaned_article}")
+    return f"https://www.legifrance.gouv.fr/search/all?query={query}"
 
 
 def _format_moderation_block(reasons: list[str]) -> str:

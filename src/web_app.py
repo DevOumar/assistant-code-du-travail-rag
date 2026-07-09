@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Protocol
+from urllib.parse import quote_plus
 
 from config import AppConfig, LEGAL_DISCLAIMER, load_config
 from moderator import InputModerator
@@ -83,9 +84,22 @@ def format_sources_markdown(sources: list[RetrievedChunk]) -> str:
         article = source.metadata.get("article") or "article non renseigné"
         origin = source.metadata.get("source") or "source non renseignée"
         score = f" - score {source.score:.4f}" if source.score is not None else ""
-        lines.append(f"- [{index}] `{article}` - {origin}{score}")
+        source_url = _build_source_url(source)
+        if source_url:
+            lines.append(f"- [{index}] [`{article}`]({source_url}) - {origin}{score}")
+        else:
+            lines.append(f"- [{index}] `{article}` - {origin}{score}")
 
     return "\n".join(lines)
+
+
+def _build_source_url(source: RetrievedChunk) -> str | None:
+    article = str(source.metadata.get("article") or "").strip()
+    if not article:
+        return None
+
+    query = quote_plus(f"article {article}")
+    return f"https://www.legifrance.gouv.fr/search/all?query={query}"
 
 
 def build_corpus_status(config: AppConfig) -> str:
