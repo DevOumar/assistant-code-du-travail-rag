@@ -75,7 +75,6 @@ def test_build_no_context_answer_contains_required_fallback_and_disclaimer() -> 
 def test_build_small_talk_answer_contains_specialized_assistant_message() -> None:
     answer = build_small_talk_answer()
 
-    assert "Bonjour !" in answer
     assert "Je suis un assistant spécialisé dans le droit du travail français" in answer
     assert LEGAL_DISCLAIMER in answer
 

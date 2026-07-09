@@ -22,7 +22,14 @@ def test_unavailable_pipeline_returns_clear_placeholder_answer() -> None:
 def test_unavailable_pipeline_answers_greeting_without_retrieval() -> None:
     response = UnavailablePipeline().answer("Bonjour !!")
 
-    assert "Bonjour !" in response.answer
+    assert "assistant spécialisé dans le droit du travail français" in response.answer
+    assert response.sources == []
+    assert response.used_context is False
+
+
+def test_unavailable_pipeline_answers_chatty_question_without_retrieval() -> None:
+    response = UnavailablePipeline().answer("Tu fais quoi ?")
+
     assert "assistant spécialisé dans le droit du travail français" in response.answer
     assert response.sources == []
     assert response.used_context is False

@@ -59,7 +59,20 @@ def test_rag_pipeline_returns_small_talk_answer_for_greeting() -> None:
 
     response = pipeline.answer("Bonjour !!")
 
-    assert "Bonjour !" in response.answer
+    assert "assistant spécialisé dans le droit du travail français" in response.answer
+    assert response.sources == []
+    assert response.used_context is False
+    assert retriever.last_question is None
+    assert generator.last_messages is None
+
+
+def test_rag_pipeline_returns_small_talk_answer_for_chatty_question() -> None:
+    retriever = FakeRetriever(chunks=[])
+    generator = FakeGenerator(answer="Cette reponse ne doit pas etre utilisee.")
+    pipeline = RagPipeline(retriever=retriever, generator=generator, top_k=3)
+
+    response = pipeline.answer("Tu fais quoi ?")
+
     assert "assistant spécialisé dans le droit du travail français" in response.answer
     assert response.sources == []
     assert response.used_context is False

@@ -73,6 +73,14 @@ GREETINGS_PATTERNS = (
     r"^(au revoir|aurevoir|bye)([!\.\?\s]*)$",
 )
 
+SMALL_TALK_PATTERNS = (
+    r"^(bonjour|bonsoir|salut|coucou|hello|hi)[,\s]*(comment\s+vas[-\s]*tu|ca\s+va|ça\s+va)?[!\.\?\s]*$",
+    r"^(comment\s+vas[-\s]*tu|ca\s+va|ça\s+va)[!\.\?\s]*$",
+    r"^(tu\s+fais\s+quoi|tu\s+es\s+qui|qui\s+es[-\s]*tu|que\s+fais[-\s]*tu|qu'est[-\s]*ce\s+que\s+tu\s+fais)[!\.\?\s]*$",
+    r"^(merci|merci beaucoup|merci bien|ok|d'accord|parfait|super|nickel)[!\.\?\s]*$",
+    r"^(au revoir|aurevoir|bye|a\s+bientot|à\s+bientôt)[!\.\?\s]*$",
+)
+
 LEGAL_SCOPE_KEYWORDS = (
     "code du travail",
     "travail",
@@ -195,13 +203,21 @@ def moderate_query(question: str, enforce_scope: bool = True) -> dict[str, objec
 
 
 def is_salutation(question: str) -> bool:
-    """Return True when the message is only a greeting or a brief courtesy."""
+    """Return True when the message is a greeting or a brief courtesy."""
+
+    return is_small_talk(question)
+
+
+def is_small_talk(question: str) -> bool:
+    """Return True when the message is a greeting, courtesy, or short chat."""
 
     normalized_question = _normalize_question(question)
     if not normalized_question:
         return False
 
-    return _matches_any(normalized_question, GREETINGS_PATTERNS)
+    return _matches_any(normalized_question, SMALL_TALK_PATTERNS) or _matches_any(
+        normalized_question, GREETINGS_PATTERNS
+    )
 
 
 @dataclass(frozen=True)

@@ -85,7 +85,7 @@ def build_small_talk_answer(legal_disclaimer: str = LEGAL_DISCLAIMER) -> str:
     """Return a polite answer for greetings or very short courtesy messages."""
 
     return (
-        "Bonjour ! Je suis un assistant spécialisé dans le droit du travail français. "
+        "Je suis un assistant spécialisé dans le droit du travail français. "
         "Posez-moi une question juridique sur ce sujet.\n\n"
         f"{legal_disclaimer}"
     )

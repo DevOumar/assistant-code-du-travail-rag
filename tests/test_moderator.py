@@ -1,4 +1,4 @@
-from moderator import InputModerator, ModerationStatus, is_salutation, read_moderator_prompt
+from moderator import InputModerator, ModerationStatus, is_salutation, is_small_talk, read_moderator_prompt
 
 
 def test_moderator_allows_labor_law_question() -> None:
@@ -68,6 +68,12 @@ def test_salutation_detector_identifies_short_courtesy_messages() -> None:
     assert is_salutation("Bonjour !!")
     assert is_salutation("Merci beaucoup")
     assert not is_salutation("Bonjour, quelle est la durée légale du travail ?")
+
+
+def test_small_talk_detector_identifies_chatty_messages() -> None:
+    assert is_small_talk("Tu fais quoi ?")
+    assert is_small_talk("Comment vas-tu ?")
+    assert not is_small_talk("Quelle est la durée légale du travail ?")
 
 
 def test_moderator_prompt_policy_is_externalized() -> None:
