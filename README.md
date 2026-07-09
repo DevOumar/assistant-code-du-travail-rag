@@ -230,6 +230,115 @@ pytest
 Les tests couvrent actuellement la configuration, le chunking, les prompts, la
 modération, l'orchestration RAG abstraite, la CLI et l'interface web.
 
+## Corpus Loader (feature/corpus-loader)
+
+### Source retenue
+
+Le corpus est récupéré via l'**API Légifrance (environnement sandbox PISTE)**, plutôt
+qu'un scraping HTML ou un import manuel de PDF. Les identifiants fournis pour le projet
+sont des identifiants sandbox : `sandbox-oauth.piste.gouv.fr` et
+`sandbox-api.piste.gouv.fr` doivent donc être utilisés tant que des identifiants
+production ne sont pas fournis.
+
+### Authentification
+
+Le flux est un **OAuth2 client credentials** :
+
+```text
+POST https://sandbox-oauth.piste.gouv.fr/api/oauth/token
+Content-Type: application/x-www-form-urlencoded
+grant_type=client_credentials&client_id=...&client_secret=...&scope=openid
+```
+
+`src/corpus_loader.py` gère l'obtention et le renouvellement automatique du token :
+le jeton est mis en cache et rafraîchi automatiquement lorsqu'il approche de son
+expiration (`expires_in`, avec une marge de sécurité), sans appel réseau superflu à
+chaque requête.
+
+### Endpoint utilisé : `consult/legiPart`
+
+```text
+POST https://sandbox-api.piste.gouv.fr/dila/legifrance/lf-engine-app/consult/legiPart
+{"textId": "LEGITEXT000006072050", "date": "<date du jour, ISO>"}
+```
+
+`LEGITEXT000006072050` est l'identifiant du Code du travail. Ce choix permet de
+récupérer en un seul appel l'arborescence du code avec les sections, sous-sections,
+articles, numéros, identifiants `LEGIARTI` et contenus HTML.
+
+### Thèmes couverts
+
+Seuls les articles dont le numéro appartient aux plages suivantes sont conservés :
+
+- `L3121-1` à `L3121-36` : durée du travail
+- `L3141-1` à `L3141-32` : congés payés
+- `L1221-1` à `L1248-11` : contrat de travail
+- `L1231-1` à `L1237-20` : rupture du contrat de travail
+- `L1237-11` à `L1237-19` : rupture conventionnelle
+
+### Format de sortie brute
+
+Le résultat est écrit tel quel, sans normalisation ni chunking, dans
+`data/raw/code_du_travail_raw.json` :
+
+```json
+{
+  "retrieved_at": "2026-07-08T12:00:00+00:00",
+  "source": "legifrance-sandbox",
+  "text_id": "LEGITEXT000006072050",
+  "endpoint": "https://sandbox-api.piste.gouv.fr/dila/legifrance/lf-engine-app/consult/legiPart",
+  "article_count": 123,
+  "articles": [
+    {
+      "num": "L3121-1",
+      "id": "LEGIARTI000018487817",
+      "content": "<p>...</p>",
+      "section_path": ["Partie legislative", "Livre Ier : Duree du travail", "..."]
+    }
+  ]
+}
+```
+
+Ce fichier brut sert d'entrée à `src/document_parser.py`, qui le normalise vers le
+format `id`/`text`/`metadata` attendu par `chunking.py`.
+
+## Document Parser (feature/document-parser)
+
+### Rôle
+
+`src/document_parser.py` lit le corpus brut produit par `src/corpus_loader.py`
+(`data/raw/code_du_travail_raw.json`, un article par entrée avec `num`, `id` LEGIARTI,
+`content` HTML et `section_path`) et le transforme en documents normalisés au format
+`id`/`text`/`metadata` attendu par `chunking.py`. Il ne découpe rien lui-même : cette
+étape reste la responsabilité de `chunking.py`.
+
+### Nettoyage du HTML
+
+`clean_html()` retire les balises (`p`, `div`, `br`, `table`/`tr`/`td`/`th`, `a`, ...)
+avec `html.unescape` et des expressions régulières, tout en préservant les coupures de
+paragraphes et de lignes de tableau pour garder un texte lisible.
+
+### Identifiant et métadonnées
+
+- **Identifiant du document** : construit à partir du numéro d'article
+  (`article-L3121-1`), stable et lisible pour la traçabilité des citations.
+- **Article** : exposé dans `metadata["article"]` pour être repris par le chunking, les
+  prompts, le retrieval et l'affichage des sources.
+- **Section thématique** : déduite du numéro d'article via des plages calquées sur
+  celles du `corpus-loader`, évaluées de la plus spécifique à la plus large.
+- **Autres champs** : `num`, `legiarti`, `source`, `corpus_date` et `title`.
+
+### Sortie et contrôle qualité
+
+Le résultat est écrit dans `data/processed/code_du_travail_documents.json` avec un
+horodatage de génération et le nombre d'articles ignorés. Les articles sans `num` ou
+sans `content` exploitable sont ignorés individuellement, sans faire échouer l'ensemble
+du traitement. Un fichier source manquant ou un JSON malformé déclenche une erreur
+explicite.
+
+Exécuter le module directement (`python src/document_parser.py`) affiche un échantillon
+aléatoire de documents pour vérification manuelle.
+
 ## Workflow Git
 
 Workflow imposé :
