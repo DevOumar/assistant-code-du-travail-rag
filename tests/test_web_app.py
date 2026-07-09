@@ -1,14 +1,19 @@
 from config import LEGAL_DISCLAIMER, load_config
 from rag import RetrievedChunk
-from web_app import UnavailablePipeline, build_corpus_status, format_sources_markdown
+from web_app import (
+    UnavailablePipeline,
+    _build_pipeline_or_fallback,
+    build_corpus_status,
+    format_sources_markdown,
+)
 
 
 def test_unavailable_pipeline_returns_clear_placeholder_answer() -> None:
-    response = UnavailablePipeline().answer("Quelle est la durée légale du travail ?")
+    response = UnavailablePipeline().answer("Quelle est la duree legale du travail ?")
 
     assert response.used_context is False
     assert response.sources == []
-    assert "pipeline RAG complet n'est pas encore connecté" in response.answer
+    assert "pipeline RAG complet n'est pas disponible" in response.answer
     assert LEGAL_DISCLAIMER in response.answer
 
 
@@ -46,3 +51,23 @@ def test_build_corpus_status_mentions_source_and_date() -> None:
 
     assert "Code du travail export Legifrance" in status
     assert "2026-07-08" in status
+
+
+def test_build_pipeline_or_fallback_returns_concrete_pipeline(monkeypatch) -> None:
+    config = load_config(env_file=None, environ={"GROQ_API_KEY": "test-key"})
+    concrete_pipeline = object()
+
+    monkeypatch.setattr("web_app.build_rag_pipeline", lambda config: concrete_pipeline)
+
+    assert _build_pipeline_or_fallback(config) is concrete_pipeline
+
+
+def test_build_pipeline_or_fallback_keeps_ui_available(monkeypatch) -> None:
+    config = load_config(env_file=None, environ={})
+
+    def fail(config):
+        raise RuntimeError("not indexed")
+
+    monkeypatch.setattr("web_app.build_rag_pipeline", fail)
+
+    assert isinstance(_build_pipeline_or_fallback(config), UnavailablePipeline)

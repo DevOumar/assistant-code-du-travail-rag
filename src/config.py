@@ -46,6 +46,10 @@ class EmbeddingConfig:
 @dataclass(frozen=True)
 class RetrievalConfig:
     top_k: int
+    max_top_k: int = 7
+    similarity_threshold: float = 0.20
+    enable_reranking: bool = False
+    reranker_model_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -82,7 +86,10 @@ def load_config(
     """Load application settings from an optional .env file and environment variables."""
 
     if env_file is not None and environ is None:
-        load_dotenv(env_file, override=False)
+        env_path = Path(env_file)
+        if not env_path.is_absolute():
+            env_path = PROJECT_ROOT / env_path
+        load_dotenv(env_path, override=False)
 
     source = environ if environ is not None else os.environ
 
@@ -109,6 +116,10 @@ def load_config(
 
     retrieval = RetrievalConfig(
         top_k=_integer(source, "RETRIEVAL_TOP_K", 5, minimum=1),
+        max_top_k=_integer(source, "RETRIEVAL_MAX_TOP_K", 7, minimum=1),
+        similarity_threshold=_floating(source, "RETRIEVAL_SIMILARITY_THRESHOLD", 0.20, minimum=0.0, maximum=1.0),
+        enable_reranking=_boolean(source, "RETRIEVAL_ENABLE_RERANKING", False),
+        reranker_model_name=_optional(source, "RETRIEVAL_RERANKER_MODEL_NAME"),
     )
 
     llm = LlmConfig(
@@ -147,6 +158,20 @@ def _string(source: Mapping[str, str], key: str, default: str) -> str:
     if value is None:
         return default
     return value
+
+
+def _boolean(
+    source: Mapping[str, str],
+    key: str,
+    default: bool,
+) -> bool:
+    raw_value = _string(source, key, str(default))
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "oui", "y", "t"}:
+        return True
+    if normalized in {"0", "false", "no", "non", "n", "f"}:
+        return False
+    raise ValueError(f"{key} must be a boolean value.")
 
 
 def _path(source: Mapping[str, str], key: str, default: str) -> Path:

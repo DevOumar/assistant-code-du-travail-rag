@@ -1,8 +1,7 @@
 """Command-line interface helpers.
 
-The concrete retriever and generator are provided by later integration work.
 This module owns the interactive loop and keeps it testable by dependency
-injection.
+injection. The production entry point builds the concrete RAG pipeline.
 """
 
 from __future__ import annotations
@@ -11,7 +10,8 @@ from dataclasses import dataclass
 from typing import Callable, Protocol
 
 from moderator import InputModerator
-from rag import RagPipeline, RagResponse, RetrievedChunk
+from pipeline import PipelineBuildError, build_rag_pipeline
+from rag import RagResponse, RetrievedChunk
 
 
 InputFunc = Callable[[str], str]
@@ -61,7 +61,12 @@ def run_interactive_loop(
             output_func(_format_moderation_block(decision.reasons))
             continue
 
-        response = pipeline.answer(decision.sanitized_question or raw_question)
+        try:
+            response = pipeline.answer(decision.sanitized_question or raw_question)
+        except Exception as exc:
+            output_func(f"Erreur du pipeline RAG : {exc}")
+            continue
+
         output_func(_format_response(response))
 
 
@@ -91,13 +96,16 @@ def _format_moderation_block(reasons: list[str]) -> str:
 
 
 def main() -> int:
-    """Entry point placeholder until concrete retrieval and generation are wired."""
+    """Run the concrete interactive CLI."""
 
-    print(
-        "La CLI interactive sera activee lorsque les implementations concretes "
-        "du retrieval et de la generation seront integrees."
-    )
-    return 1
+    try:
+        pipeline = build_rag_pipeline()
+    except PipelineBuildError as exc:
+        print(f"Configuration invalide : {exc}")
+        return 1
+
+    run_interactive_loop(pipeline=pipeline)
+    return 0
 
 
 if __name__ == "__main__":

@@ -135,6 +135,18 @@ class TestParseDocuments:
         assert [document.id for document in documents] == ["article-L3121-1"]
         assert len(skipped) == 2
 
+    def test_skips_duplicate_article_numbers(self) -> None:
+        articles = [
+            {"num": "L3121-1", "id": "LEGIARTI1", "content": "<p>Valide.</p>", "section_path": ["Titre"]},
+            {"num": "L3121-1", "id": "LEGIARTI1", "content": "<p>Valide.</p>", "section_path": ["Titre"]},
+        ]
+
+        documents, skipped = parse_documents(articles, corpus_source="legifrance-sandbox", corpus_date="2026-07-08")
+
+        assert [document.id for document in documents] == ["article-L3121-1"]
+        assert len(skipped) == 1
+        assert skipped[0]["reason"] == "duplicate document id"
+
 
 class TestLoadRawArticles:
     def test_raises_when_file_missing(self, tmp_path: Path) -> None:

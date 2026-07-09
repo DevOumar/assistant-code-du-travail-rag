@@ -38,8 +38,10 @@ def test_rag_pipeline_returns_fallback_when_no_context_is_found() -> None:
 
     assert response == RagResponse(
         question="Que dit le Code du travail sur ce sujet ?",
-        answer=f"Je ne trouve pas cette information dans ma base.\n\n{LEGAL_DISCLAIMER}",
+        answer=f"Information not found in the knowledge base.\n\n{LEGAL_DISCLAIMER}",
         sources=[],
+        scores=[],
+        top_k=3,
         used_context=False,
     )
     assert retriever.last_top_k == 3

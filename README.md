@@ -23,9 +23,9 @@ Le dépôt contient déjà les fondations techniques du projet :
 - interface web Streamlit sous forme de chat ;
 - tests unitaires sur les briques déjà livrées.
 
-Les parties qui dépendent encore de l'intégration finale sont le chargement réel du
-corpus, le parsing complet des documents juridiques, l'indexation ChromaDB, le
-retrieval Top-k et le client Groq concret.
+Le pipeline applicatif est maintenant câblé : le corpus peut être chargé, parsé,
+chunké, indexé dans ChromaDB, puis interrogé via la CLI ou l'interface Streamlit avec
+Groq comme générateur final.
 
 ## Fonctionnement attendu
 
@@ -85,6 +85,9 @@ Contrainte du sujet : **LangChain et LlamaIndex ne sont pas utilisés**.
 |   +-- prompting.py
 |   +-- rag.py
 |   +-- moderator.py
+|   +-- llm.py
+|   +-- pipeline.py
+|   +-- index_pipeline.py
 |   +-- cli.py
 |   +-- web_app.py
 +-- tests/
@@ -108,6 +111,15 @@ modifier sans toucher au code.
 utilise des interfaces injectées pour éviter de coupler le coeur RAG à ChromaDB ou à
 Groq.
 
+`src/llm.py` contient le générateur concret basé sur Groq. Il lit le modèle, la
+température et le nombre maximal de tokens depuis la configuration.
+
+`src/pipeline.py` câble le retriever ChromaDB et le générateur Groq dans un
+`RagPipeline` prêt à être utilisé par la CLI et l'interface web.
+
+`src/index_pipeline.py` exécute la chaîne de préparation : chargement optionnel du
+corpus Légifrance, parsing, chunking puis indexation ChromaDB.
+
 `src/retrieval.py` adapte les résultats ChromaDB au contrat attendu par le RAG. Il
 inclut une décomposition déterministe des questions composées : une question avec
 plusieurs idées est découpée en sous-questions, chaque sous-question est recherchée
@@ -119,9 +131,8 @@ injection et les demandes hors périmètre du droit du travail français.
 `src/cli.py` contient la boucle de discussion en ligne de commande.
 
 `src/web_app.py` fournit une interface Streamlit type chat avec historique, statut du
-corpus, affichage du disclaimer et rendu des sources. Tant que le pipeline complet
-n'est pas connecté, l'interface indique clairement que le RAG final n'est pas encore
-disponible.
+corpus, affichage du disclaimer et rendu des sources. Si l'index ChromaDB ou la clé
+Groq ne sont pas disponibles, l'interface reste ouverte et affiche un message clair.
 
 ## Choix liés au sujet
 
@@ -208,6 +219,24 @@ CORPUS_DATE=
 
 ## Exécution
 
+Préparer le corpus brut, parser les articles et recréer l'index ChromaDB :
+
+```bash
+python src/index_pipeline.py --fetch-raw --parse-raw --recreate
+```
+
+Si le corpus brut existe déjà, parser puis réindexer :
+
+```bash
+python src/index_pipeline.py --parse-raw --recreate
+```
+
+Si les documents parsés existent déjà, réindexer uniquement :
+
+```bash
+python src/index_pipeline.py --recreate
+```
+
 Lancer la CLI :
 
 ```bash
@@ -219,10 +248,6 @@ Lancer l'interface web :
 ```bash
 streamlit run src/web_app.py
 ```
-
-Pendant la phase actuelle, l'interface web s'ouvre mais affiche un message indiquant
-que le pipeline RAG complet n'est pas encore connecté. C'est volontaire : le projet
-attend encore l'intégration du corpus, du retrieval et du générateur concret.
 
 ## Tests
 
