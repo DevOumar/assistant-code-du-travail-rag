@@ -3,8 +3,8 @@ import pytest
 from config import load_config
 from llm import GroqAnswerGenerator
 from pipeline import PipelineBuildError, build_rag_pipeline
+from question_agents import ReferenceRetriever
 from rag import RagPipeline
-from retrieval import VectorStoreRetriever
 
 
 def test_build_rag_pipeline_wires_concrete_components() -> None:
@@ -20,7 +20,7 @@ def test_build_rag_pipeline_wires_concrete_components() -> None:
     pipeline = build_rag_pipeline(config)
 
     assert isinstance(pipeline, RagPipeline)
-    assert isinstance(pipeline.retriever, VectorStoreRetriever)
+    assert isinstance(pipeline.retriever, ReferenceRetriever)
     assert isinstance(pipeline.generator, GroqAnswerGenerator)
     assert pipeline.top_k == 7
     assert pipeline.corpus_date == "2026-07-08"

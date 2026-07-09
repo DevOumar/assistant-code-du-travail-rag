@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from config import AppConfig, load_config
 from llm import GroqAnswerGenerator
+from question_agents import ReferenceRetriever
 from rag import RagPipeline
-from retrieval import VectorStoreRetriever
 
 
 class PipelineBuildError(Exception):
@@ -20,7 +20,7 @@ def build_rag_pipeline(config: AppConfig | None = None) -> RagPipeline:
         raise PipelineBuildError(f"Unsupported LLM provider: {active_config.llm.provider}")
 
     return RagPipeline(
-        retriever=VectorStoreRetriever(config=active_config),
+        retriever=ReferenceRetriever(config=active_config),
         generator=GroqAnswerGenerator(config=active_config),
         top_k=active_config.retrieval.top_k,
         corpus_date=active_config.corpus.date,

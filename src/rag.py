@@ -10,13 +10,8 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from config import LEGAL_DISCLAIMER
-from moderator import is_salutation
-from prompting import (
-    PromptMessages,
-    build_no_context_answer,
-    build_prompt_messages,
-    build_small_talk_answer,
-)
+from prompting import PromptMessages, build_no_context_answer, build_prompt_messages, build_small_talk_answer
+from question_agents import QuestionFormatter
 
 
 @dataclass(frozen=True)
@@ -56,8 +51,9 @@ class RagPipeline:
 
     def answer(self, question: str) -> RagResponse:
         normalized_question = _require_non_empty(question, "question")
+        routing = QuestionFormatter().format(normalized_question)
 
-        if is_salutation(normalized_question):
+        if routing.should_skip_retrieval:
             return RagResponse(
                 question=normalized_question,
                 answer=build_small_talk_answer(self.legal_disclaimer),
@@ -67,7 +63,7 @@ class RagPipeline:
                 used_context=False,
             )
 
-        retrieved_chunks = self.retriever.retrieve(normalized_question, top_k=self.top_k)
+        retrieved_chunks = self.retriever.retrieve(routing.cleaned_question, top_k=self.top_k)
 
         if not retrieved_chunks:
             return RagResponse(

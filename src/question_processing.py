@@ -14,6 +14,7 @@ from typing import Iterable
 
 
 _LEADING_PATTERNS = (
+    r"^(?:bonjour|bonsoir|salut|coucou|hello|hi)\s*[,;:.-]*\s*",
     r"^(?:peux[- ]?tu|pouvez[- ]?vous|pourrais[- ]?tu|pourriez[- ]?vous)\s+(?:me\s+)?(?:dire|expliquer|préciser|indiquer)\s*[,;:.-]*\s*",
     r"^(?:j['’]aimerais|je\s+voudrais|je\s+veux)\s+savoir\s*[,;:.-]*\s*",
     r"^(?:dis[- ]?moi|explique[- ]?moi|donne[- ]?moi|dites[- ]?moi)\s*[,;:.-]*\s*",

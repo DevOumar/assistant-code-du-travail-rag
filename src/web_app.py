@@ -7,9 +7,10 @@ from datetime import date, datetime
 from typing import Protocol
 
 from config import AppConfig, LEGAL_DISCLAIMER, load_config
-from moderator import InputModerator, is_salutation
+from moderator import InputModerator
 from pipeline import build_rag_pipeline
 from prompting import build_small_talk_answer
+from question_agents import QuestionFormatter
 from rag import RagResponse, RetrievedChunk
 
 
@@ -45,7 +46,8 @@ class UnavailablePipeline:
     legal_disclaimer: str = LEGAL_DISCLAIMER
 
     def answer(self, question: str) -> RagResponse:
-        if is_salutation(question):
+        routing = QuestionFormatter().format(question)
+        if routing.should_skip_retrieval:
             return RagResponse(
                 question=question,
                 answer=build_small_talk_answer(self.legal_disclaimer),
