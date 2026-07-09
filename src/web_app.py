@@ -27,7 +27,7 @@ QUESTION_PRESETS = (
     "Quels sont les congés payés acquis après un an de travail ?",
     "Quel est le préavis en cas de démission d'un CDI ?",
     "En cas de rupture conventionnelle, quelles indemnités sont dues ?",
-    "En cas de fusion-acquisition, que devient le contrat de travail des salariés ?",
+    "En cas de fusion-acquisition ou de transfert d'entreprise, que devient le contrat de travail des salariés ?",
 )
 
 
@@ -263,7 +263,7 @@ def main() -> None:
             - Congés payés et acquisition
             - Préavis en CDI
             - Rupture conventionnelle
-            - Fusion-acquisition et transfert du contrat de travail
+            - Fusion-acquisition et transfert d'entreprise
             """
         )
 
