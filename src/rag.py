@@ -1,7 +1,7 @@
 """RAG orchestration layer.
 
-Concrete retrieval, vector database, and LLM clients are implemented in their
-own branches. This module wires those dependencies together through protocols.
+The pipeline wires retrieval and generation through protocols so the core RAG
+logic stays independent from ChromaDB and Groq implementation details.
 """
 
 from __future__ import annotations

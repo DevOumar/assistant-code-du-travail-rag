@@ -1,8 +1,7 @@
 """Streamlit chat interface for the legal RAG assistant.
 
-The concrete RAG pipeline is wired during final integration. Until then, this
-module provides the user-facing shell: chat history, moderation feedback, corpus
-metadata, source rendering, and legal disclaimer display.
+This module provides the user-facing shell: chat history, moderation feedback,
+corpus metadata, source rendering, and legal disclaimer display.
 """
 
 from __future__ import annotations
@@ -12,6 +11,7 @@ from typing import Protocol
 
 from config import AppConfig, LEGAL_DISCLAIMER, load_config
 from moderator import InputModerator
+from pipeline import build_rag_pipeline
 from rag import RagResponse, RetrievedChunk
 
 
@@ -32,7 +32,7 @@ class ChatMessage:
 
 @dataclass(frozen=True)
 class UnavailablePipeline:
-    """Temporary pipeline used before vector retrieval and LLM generation exist."""
+    """Fallback pipeline used when the vector database or LLM is unavailable."""
 
     legal_disclaimer: str = LEGAL_DISCLAIMER
 
@@ -40,10 +40,9 @@ class UnavailablePipeline:
         return RagResponse(
             question=question,
             answer=(
-                "Le pipeline RAG complet n'est pas encore connecté. "
-                "Le chargement du corpus, la base vectorielle, le retrieval et "
-                "la génération finale doivent être intégrés avant de répondre "
-                "sur le fond.\n\n"
+                "Le pipeline RAG complet n'est pas disponible dans cette session. "
+                "Verifiez la configuration, la cle Groq et l'indexation ChromaDB "
+                "avant de repondre sur le fond.\n\n"
                 f"{self.legal_disclaimer}"
             ),
             sources=[],
@@ -57,10 +56,10 @@ def format_sources_markdown(sources: list[RetrievedChunk]) -> str:
     if not sources:
         return ""
 
-    lines = ["**Sources utilisées**"]
+    lines = ["**Sources utilisees**"]
     for index, source in enumerate(sources, 1):
-        article = source.metadata.get("article") or "article non renseigné"
-        origin = source.metadata.get("source") or "source non renseignée"
+        article = source.metadata.get("article") or "article non renseigne"
+        origin = source.metadata.get("source") or "source non renseignee"
         score = f" - score {source.score:.4f}" if source.score is not None else ""
         lines.append(f"- [{index}] `{article}` - {origin}{score}")
 
@@ -70,8 +69,8 @@ def format_sources_markdown(sources: list[RetrievedChunk]) -> str:
 def build_corpus_status(config: AppConfig) -> str:
     """Return a concise status line about corpus freshness."""
 
-    source = config.corpus.source or "source non renseignée"
-    date = config.corpus.date or "date non renseignée"
+    source = config.corpus.source or "source non renseignee"
+    date = config.corpus.date or "date non renseignee"
     return f"Corpus : {source} | Date : {date}"
 
 
@@ -82,7 +81,7 @@ def main() -> None:
 
     config = load_config()
     moderator = InputModerator()
-    pipeline = UnavailablePipeline(config.legal_disclaimer)
+    pipeline: AnsweringPipeline = _build_pipeline_or_fallback(config)
 
     st.set_page_config(
         page_title="Assistant Code du travail",
@@ -103,12 +102,12 @@ def main() -> None:
             st.rerun()
 
     st.title("Assistant Code du travail")
-    st.caption("Posez une question sur le droit du travail français.")
+    st.caption("Posez une question sur le droit du travail francais.")
 
     for message in st.session_state[CHAT_HISTORY_KEY]:
         _render_message(st, message)
 
-    question = st.chat_input("Exemple : Quelle est la durée légale du travail ?")
+    question = st.chat_input("Exemple : Quelle est la duree legale du travail ?")
     if not question:
         return
 
@@ -118,20 +117,36 @@ def main() -> None:
 
     decision = moderator.moderate(question)
     if not decision.is_allowed:
-        answer = "Question refusée par la modération :\n" + "\n".join(
+        answer = "Question refusee par la moderation :\n" + "\n".join(
             f"- {reason}" for reason in decision.reasons
         )
         assistant_message = ChatMessage(role="assistant", content=answer)
     else:
-        response = pipeline.answer(decision.sanitized_question or question)
-        assistant_message = ChatMessage(
-            role="assistant",
-            content=response.answer,
-            sources=response.sources,
-        )
+        try:
+            response = pipeline.answer(decision.sanitized_question or question)
+            assistant_message = ChatMessage(
+                role="assistant",
+                content=response.answer,
+                sources=response.sources,
+            )
+        except Exception as exc:
+            assistant_message = ChatMessage(
+                role="assistant",
+                content=(
+                    "Le pipeline RAG n'est pas pret pour repondre a cette question. "
+                    f"Detail technique : {exc}"
+                ),
+            )
 
     st.session_state[CHAT_HISTORY_KEY].append(assistant_message)
     _render_message(st, assistant_message)
+
+
+def _build_pipeline_or_fallback(config: AppConfig) -> AnsweringPipeline:
+    try:
+        return build_rag_pipeline(config)
+    except Exception:
+        return UnavailablePipeline(config.legal_disclaimer)
 
 
 def _initialize_history(st: object) -> None:
