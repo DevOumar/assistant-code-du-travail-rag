@@ -4,6 +4,7 @@ from config import LEGAL_DISCLAIMER
 from prompting import (
     PromptContextItem,
     build_no_context_answer,
+    build_small_talk_answer,
     build_prompt_messages,
     format_context,
     render_rag_system_prompt,
@@ -67,6 +68,14 @@ def test_build_prompt_messages_formats_question_context_and_disclaimer() -> None
 def test_build_no_context_answer_contains_required_fallback_and_disclaimer() -> None:
     answer = build_no_context_answer()
 
+    assert "Je suis un assistant spécialisé dans le droit du travail français" in answer
+    assert LEGAL_DISCLAIMER in answer
+
+
+def test_build_small_talk_answer_contains_specialized_assistant_message() -> None:
+    answer = build_small_talk_answer()
+
+    assert "Bonjour !" in answer
     assert "Je suis un assistant spécialisé dans le droit du travail français" in answer
     assert LEGAL_DISCLAIMER in answer
 

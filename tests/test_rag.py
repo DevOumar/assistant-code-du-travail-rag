@@ -52,6 +52,21 @@ def test_rag_pipeline_returns_fallback_when_no_context_is_found() -> None:
     assert generator.last_messages is None
 
 
+def test_rag_pipeline_returns_small_talk_answer_for_greeting() -> None:
+    retriever = FakeRetriever(chunks=[])
+    generator = FakeGenerator(answer="Cette reponse ne doit pas etre utilisee.")
+    pipeline = RagPipeline(retriever=retriever, generator=generator, top_k=3)
+
+    response = pipeline.answer("Bonjour !!")
+
+    assert "Bonjour !" in response.answer
+    assert "assistant spécialisé dans le droit du travail français" in response.answer
+    assert response.sources == []
+    assert response.used_context is False
+    assert retriever.last_question is None
+    assert generator.last_messages is None
+
+
 def test_rag_pipeline_builds_prompt_and_returns_sources() -> None:
     chunk = RetrievedChunk(
         text="La duree legale du travail effectif est fixee a trente-cinq heures.",

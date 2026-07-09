@@ -1,4 +1,4 @@
-from moderator import InputModerator, ModerationStatus, read_moderator_prompt
+from moderator import InputModerator, ModerationStatus, is_salutation, read_moderator_prompt
 
 
 def test_moderator_allows_labor_law_question() -> None:
@@ -62,6 +62,12 @@ def test_moderator_can_disable_scope_check() -> None:
     )
 
     assert decision.status is ModerationStatus.ALLOWED
+
+
+def test_salutation_detector_identifies_short_courtesy_messages() -> None:
+    assert is_salutation("Bonjour !!")
+    assert is_salutation("Merci beaucoup")
+    assert not is_salutation("Bonjour, quelle est la durée légale du travail ?")
 
 
 def test_moderator_prompt_policy_is_externalized() -> None:

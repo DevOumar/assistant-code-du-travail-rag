@@ -67,6 +67,12 @@ PROMPT_INJECTION_PATTERNS = (
     r"\bjailbreak\b",
 )
 
+GREETINGS_PATTERNS = (
+    r"^(bonjour|bonsoir|salut|coucou|hello|hi)([!\.\?\s]*)$",
+    r"^(merci|merci beaucoup|merci bien|ok|d'accord|parfait)([!\.\?\s]*)$",
+    r"^(au revoir|aurevoir|bye)([!\.\?\s]*)$",
+)
+
 LEGAL_SCOPE_KEYWORDS = (
     "code du travail",
     "travail",
@@ -186,6 +192,16 @@ def moderate_query(question: str, enforce_scope: bool = True) -> dict[str, objec
         "confidence": 0.55,
         "reason": "Question ambiguë, mais autorisée par sécurité.",
     }
+
+
+def is_salutation(question: str) -> bool:
+    """Return True when the message is only a greeting or a brief courtesy."""
+
+    normalized_question = _normalize_question(question)
+    if not normalized_question:
+        return False
+
+    return _matches_any(normalized_question, GREETINGS_PATTERNS)
 
 
 @dataclass(frozen=True)
