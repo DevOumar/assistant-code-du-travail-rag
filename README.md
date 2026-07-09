@@ -27,6 +27,31 @@ Le pipeline applicatif est maintenant câblé : le corpus peut être chargé, pa
 chunké, indexé dans ChromaDB, puis interrogé via la CLI ou l'interface Streamlit avec
 Groq comme générateur final.
 
+## Workflow de branchement
+
+Ce projet utilise une branche d'intégration dédiée : `feature/orchestrateur`.
+Toutes les fonctionnalités doivent d'abord être fusionnées dans cette branche
+avant d'être propagées vers `dev`.
+
+Règles principales :
+
+- Travaillez sur une branche `feature/<nom>` isolée pour chaque brique.
+- Ne fusionnez pas directement dans `dev` ou `main`.
+- Fusionnez d'abord chaque `feature/<nom>` dans `feature/orchestrateur`.
+- Testez sur `feature/orchestrateur` avant de mettre à jour `dev`.
+- `main` reste inchangée tant que l'intégration n'est pas validée.
+
+Exemple de séquence :
+
+```bash
+git switch feature/orchestrateur
+git merge --no-ff --no-edit feature/<nom>
+git push origin feature/orchestrateur
+```
+
+Une fois l'intégration validée, `dev` peut être synchronisée à partir de
+`feature/orchestrateur`.
+
 ## Fonctionnement attendu
 
 Le pipeline final suivra ce parcours :
