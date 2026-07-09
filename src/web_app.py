@@ -233,7 +233,7 @@ def main() -> None:
             enable_reformulation=st.session_state[QUESTION_REFORMULATION_KEY],
         )
 
-        st.markdown("**â–¸ Conversations**")
+        st.markdown("**▸ Conversations**")
         conversation_names = [item["name"] for item in st.session_state[CONVERSATIONS_KEY]]
         selected_name = st.radio(
             "Choisir une conversation",
@@ -263,7 +263,7 @@ def main() -> None:
             - Congés payés et acquisition
             - Préavis en CDI
             - Rupture conventionnelle
-            - Fusion-acquisition et contrat de travail
+            - Fusion-acquisition et transfert du contrat de travail
             """
         )
 
@@ -469,3 +469,4 @@ def _inject_styles(st: object) -> None:
 
 if __name__ == "__main__":
     main()
+
