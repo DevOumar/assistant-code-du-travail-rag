@@ -1,14 +1,10 @@
-"""Streamlit chat interface for the legal RAG assistant.
-
-This module provides the user-facing shell: chat history, moderation feedback,
-corpus metadata, source rendering, and legal disclaimer display.
-"""
+"""Streamlit chat interface for the legal RAG assistant."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from typing import Protocol
-from datetime import datetime, date
 
 from config import AppConfig, LEGAL_DISCLAIMER, load_config
 from moderator import InputModerator
@@ -16,7 +12,6 @@ from pipeline import build_rag_pipeline
 from rag import RagResponse, RetrievedChunk
 
 
-CHAT_HISTORY_KEY = "chat_messages"
 CONVERSATIONS_KEY = "conversations"
 CURRENT_CONVERSATION_INDEX_KEY = "current_conversation_index"
 
@@ -59,7 +54,7 @@ def format_sources_markdown(sources: list[RetrievedChunk]) -> str:
     if not sources:
         return ""
 
-    lines = ["**Sources utilisées**"]
+    lines = ["**Sources utilisees**"]
     for index, source in enumerate(sources, 1):
         article = source.metadata.get("article") or "article non renseigne"
         origin = source.metadata.get("source") or "source non renseignee"
@@ -72,13 +67,12 @@ def format_sources_markdown(sources: list[RetrievedChunk]) -> str:
 def build_corpus_status(config: AppConfig) -> str:
     """Return a concise status line about corpus freshness."""
 
-    source = config.corpus.source or "source non renseignée"
+    source = config.corpus.source or "source non renseignee"
     corpus_date_str = config.corpus.date
 
     if not corpus_date_str:
-        return f"Corpus : {source} | Date : non renseignée"
+        return f"Corpus : {source} | Date : non renseignee"
 
-    # Try parsing ISO date `YYYY-MM-DD`
     try:
         corpus_date = datetime.fromisoformat(corpus_date_str).date()
     except Exception:
@@ -93,11 +87,10 @@ def build_corpus_status(config: AppConfig) -> str:
     elif months <= 12:
         risk = "Moyen"
     else:
-        risk = "Élevé"
+        risk = "Eleve"
 
     age_text = f"{months} mois" if months > 0 else "<1 mois"
-
-    return f"Corpus : {source} | Date : {corpus_date_str} | Âge : {age_text} | Risque d'obsolescence : {risk}"
+    return f"Corpus : {source} | Date : {corpus_date_str} | Age : {age_text} | Risque d'obsolescence : {risk}"
 
 
 def main() -> None:
@@ -106,6 +99,8 @@ def main() -> None:
     import streamlit as st
 
     config = load_config()
+    moderator = InputModerator()
+    pipeline: AnsweringPipeline = _build_pipeline_or_fallback(config)
 
     st.set_page_config(
         page_title="Assistant Code du travail",
@@ -113,45 +108,83 @@ def main() -> None:
         initial_sidebar_state="expanded",
     )
 
-    if not config.llm.api_key:
-        st.sidebar.error(
-            "GROQ_API_KEY n'est pas défini. Vérifiez votre fichier .env et le répertoire de démarrage de Streamlit."
-        )
-
-    moderator = InputModerator()
-    pipeline: AnsweringPipeline = _build_pipeline_or_fallback(config)
-
     _inject_styles(st)
     _initialize_history(st)
 
     with st.sidebar:
-        st.title("Assistant")
+        st.markdown("<div class='sidebar-title'>Assistant Code du travail</div>", unsafe_allow_html=True)
+        st.caption("RAG documentaire et reponses sourcées")
+
+        if not config.llm.api_key:
+            st.warning("GROQ_API_KEY n'est pas definie.")
+
         st.markdown(
-            f"<div class='sidebar-panel'>"
-            f"<p><strong>Corpus</strong> : {config.corpus.source or 'non renseigné'}</p>"
-            f"<p><strong>Date</strong> : {config.corpus.date or 'non renseignée'}</p>"
-            f"<p><strong>Top-k</strong> : {config.retrieval.top_k}</p>"
-            f"<p><strong>Statut</strong> : {build_corpus_status(config)}</p>"
-            f"</div>",
+            f"""
+            <div class='sidebar-card'>
+                <div class='sidebar-card__label'>Corpus</div>
+                <div class='sidebar-card__value'>{config.corpus.source or 'non renseigne'}</div>
+                <div class='sidebar-card__meta'>Date : {config.corpus.date or 'non renseignee'}</div>
+                <div class='sidebar-card__meta'>Top-k : {config.retrieval.top_k}</div>
+                <div class='sidebar-card__meta'>{build_corpus_status(config)}</div>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
+
+        st.markdown("**Conversations**")
+        conversation_names = [item["name"] for item in st.session_state[CONVERSATIONS_KEY]]
+        selected_name = st.radio(
+            "Choisir une conversation",
+            conversation_names,
+            index=st.session_state[CURRENT_CONVERSATION_INDEX_KEY],
+            label_visibility="collapsed",
+        )
+        st.session_state[CURRENT_CONVERSATION_INDEX_KEY] = conversation_names.index(selected_name)
+
+        col_new, col_clear = st.columns(2)
+        with col_new:
+            if st.button("Nouvelle", use_container_width=True):
+                _create_new_conversation(st)
+                st.rerun()
+        with col_clear:
+            if st.button("Vider", use_container_width=True):
+                st.session_state[CONVERSATIONS_KEY][st.session_state[CURRENT_CONVERSATION_INDEX_KEY]][
+                    "messages"
+                ] = []
+                st.rerun()
+
         st.divider()
-        st.divider()
+        st.markdown("**Questions de test**")
         st.markdown(
-            "<div class='legal-badge'>Cet assistant ne fournit pas de conseil juridique. "
-            "Consultez un avocat ou l'inspection du travail pour votre situation personnelle.</div>",
+            """
+            - Duree legale du travail
+            - Conges payes et acquisition
+            - Preavis en CDI
+            - Rupture conventionnelle
+            - Fusion acquisition et contrat de travail
+            """
+        )
+
+        st.markdown(
+            """
+            <div class='legal-badge'>
+                Cet assistant ne fournit pas de conseil juridique.
+                Consultez un avocat ou l'inspection du travail pour votre situation personnelle.
+            </div>
+            """,
             unsafe_allow_html=True,
         )
-        
 
     st.title("Assistant Code du travail")
-    st.caption("Posez une question sur le droit du travail français.")
+    st.caption("Posez une question sur le droit du travail francais.")
 
-    current_messages = st.session_state[CONVERSATIONS_KEY][st.session_state[CURRENT_CONVERSATION_INDEX_KEY]]['messages']
+    current_messages = st.session_state[CONVERSATIONS_KEY][st.session_state[CURRENT_CONVERSATION_INDEX_KEY]][
+        "messages"
+    ]
     for message in current_messages:
         _render_message(st, message)
 
-    question = st.chat_input("Exemple : Quelle est la durée légale du travail ?")
+    question = st.chat_input("Exemple : Quelle est la duree legale du travail ?")
     if not question:
         return
 
@@ -161,7 +194,7 @@ def main() -> None:
 
     decision = moderator.moderate(question)
     if not decision.is_allowed:
-        answer = "Question refusée par la modération :\n" + "\n".join(
+        answer = "Question refusee par la moderation :\n" + "\n".join(
             f"- {reason}" for reason in decision.reasons
         )
         assistant_message = ChatMessage(role="assistant", content=answer)
@@ -177,8 +210,8 @@ def main() -> None:
             assistant_message = ChatMessage(
                 role="assistant",
                 content=(
-                    "Le pipeline RAG n'est pas prêt pour répondre à cette question. "
-                    f"Détail technique : {exc}"
+                    "Le pipeline RAG n'est pas pret pour repondre a cette question. "
+                    f"Detail technique : {exc}"
                 ),
             )
 
@@ -200,9 +233,7 @@ def _initialize_history(st: object) -> None:
         st.session_state[CURRENT_CONVERSATION_INDEX_KEY] = 0
 
     if not st.session_state[CONVERSATIONS_KEY]:
-        st.session_state[CONVERSATIONS_KEY].append(
-            {"name": "Conversation 1", "messages": []}
-        )
+        st.session_state[CONVERSATIONS_KEY].append({"name": "Conversation 1", "messages": []})
 
     current_index = st.session_state[CURRENT_CONVERSATION_INDEX_KEY]
     if current_index >= len(st.session_state[CONVERSATIONS_KEY]):
@@ -240,43 +271,37 @@ def _inject_styles(st: object) -> None:
         [data-testid="stChatInput"] textarea {
             border-radius: 12px;
         }
-        .sidebar-panel {
+        .sidebar-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 0.15rem;
+        }
+        .sidebar-card {
             background: #ffffff;
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 1rem;
-            line-height: 1.6;
-            margin-bottom: 1rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 0.95rem 1rem;
+            margin: 0.75rem 0 1rem;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
         }
-        .sidebar-panel p {
-            margin: 0 0 0.5rem;
-            color: #334155;
+        .sidebar-card__label {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #64748b;
+            margin-bottom: 0.35rem;
         }
-        .sidebar-panel strong {
+        .sidebar-card__value {
+            font-size: 1rem;
+            font-weight: 700;
             color: #0f172a;
+            margin-bottom: 0.15rem;
         }
-        .stRadio > div {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-        .stRadio label {
-            display: block;
-            padding: 0.85rem 1rem;
-            border-radius: 0.95rem;
-            border: 1px solid transparent;
-            background: #f8fafc;
-            color: #0f172a;
-            cursor: pointer;
-            transition: all 120ms ease-in-out;
-        }
-        .stRadio label:hover {
-            background: #eef2ff;
-        }
-        .stRadio input:checked + label {
-            border-color: #3b82f6;
-            background: #eff6ff;
-            color: #1d4ed8;
+        .sidebar-card__meta {
+            font-size: 0.88rem;
+            color: #475569;
+            line-height: 1.45;
         }
         .stButton button {
             border-radius: 0.95rem;
@@ -285,20 +310,15 @@ def _inject_styles(st: object) -> None:
             padding-top: 1rem;
         }
         .legal-badge {
-            background: #f1f5ff;
-            border-left: 4px solid #3b82f6;
-            border-radius: 12px;
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-left: 4px solid #0f172a;
+            border-radius: 14px;
             padding: 0.9rem 1rem;
-            color: #0f172a;
+            color: #334155;
             font-size: 0.95rem;
             line-height: 1.6;
-            margin-bottom: 1rem;
-        }
-        .stSidebar {
-            padding-top: 1rem;
-        }
-        .stRadio > div {
-            gap: 0.25rem;
+            margin-top: 1rem;
         }
         </style>
         """,

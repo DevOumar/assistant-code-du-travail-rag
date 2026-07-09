@@ -28,7 +28,7 @@ def test_format_sources_markdown_renders_articles_and_scores() -> None:
         ]
     )
 
-    assert "**Sources utilisées**" in markdown
+    assert "**Sources utilisees**" in markdown
     assert "`L3121-27`" in markdown
     assert "Code du travail" in markdown
     assert "0.9123" in markdown
