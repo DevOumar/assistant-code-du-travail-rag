@@ -37,6 +37,23 @@ def test_moderator_blocks_out_of_scope_question() -> None:
     assert any("droit du travail" in reason for reason in decision.reasons)
 
 
+def test_moderator_blocks_adjacent_corporate_question_without_labor_context() -> None:
+    decision = InputModerator().moderate(
+        "Comment valoriser une entreprise avant une fusion acquisition ?"
+    )
+
+    assert decision.status is ModerationStatus.BLOCKED
+    assert any("droit du travail" in reason for reason in decision.reasons)
+
+
+def test_moderator_allows_merger_question_when_labor_context_is_explicit() -> None:
+    decision = InputModerator().moderate(
+        "En cas de fusion acquisition, que devient le contrat de travail des salariés ?"
+    )
+
+    assert decision.status is ModerationStatus.ALLOWED
+
+
 def test_moderator_can_disable_scope_check() -> None:
     decision = InputModerator(enforce_scope=False).moderate(
         "Quelle recette de gateau au chocolat choisir ?"

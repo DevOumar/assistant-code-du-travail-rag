@@ -49,6 +49,7 @@ LEGAL_SCOPE_KEYWORDS = (
     "code du travail",
     "travail",
     "salarie",
+    "salarié",
     "employeur",
     "contrat",
     "cdi",
@@ -65,6 +66,37 @@ LEGAL_SCOPE_KEYWORDS = (
     "temps de travail",
 )
 
+CORPORATE_FINANCE_KEYWORDS = (
+    "fusion acquisition",
+    "fusion-acquisition",
+    "m&a",
+    "merger",
+    "acquisition",
+    "due diligence",
+    "valorisation",
+    "actionnaire",
+    "actionnaires",
+    "parts sociales",
+    "cession de titres",
+    "code de commerce",
+)
+
+LABOR_CONTEXT_KEYWORDS = (
+    "code du travail",
+    "contrat de travail",
+    "salarie",
+    "salarié",
+    "employeur",
+    "licenciement",
+    "transfert",
+    "l1224",
+    "l. 1224",
+    "comite social",
+    "cse",
+    "representants du personnel",
+    "représentants du personnel",
+)
+
 OUT_OF_SCOPE_MESSAGE = (
     "La question ne semble pas porter sur le droit du travail francais."
 )
@@ -74,6 +106,8 @@ OUT_OF_SCOPE_MESSAGE = (
 class InputModerator:
     scope_keywords: tuple[str, ...] = LEGAL_SCOPE_KEYWORDS
     injection_patterns: tuple[str, ...] = PROMPT_INJECTION_PATTERNS
+    adjacent_business_keywords: tuple[str, ...] = CORPORATE_FINANCE_KEYWORDS
+    labor_context_keywords: tuple[str, ...] = LABOR_CONTEXT_KEYWORDS
     enforce_scope: bool = True
 
     def moderate(self, question: str) -> ModerationDecision:
@@ -90,8 +124,15 @@ class InputModerator:
         if _matches_any(sanitized_question, self.injection_patterns):
             reasons.append("Tentative probable de prompt injection.")
 
-        if self.enforce_scope and not _contains_any_keyword(sanitized_question, self.scope_keywords):
-            reasons.append(OUT_OF_SCOPE_MESSAGE)
+        if self.enforce_scope:
+            if _is_adjacent_business_question(
+                sanitized_question,
+                self.adjacent_business_keywords,
+                self.labor_context_keywords,
+            ):
+                reasons.append(OUT_OF_SCOPE_MESSAGE)
+            elif not _contains_any_keyword(sanitized_question, self.scope_keywords):
+                reasons.append(OUT_OF_SCOPE_MESSAGE)
 
         if reasons:
             return ModerationDecision(
@@ -124,3 +165,16 @@ def _matches_any(text: str, patterns: Iterable[str]) -> bool:
 def _contains_any_keyword(text: str, keywords: Iterable[str]) -> bool:
     normalized_text = text.casefold()
     return any(keyword.casefold() in normalized_text for keyword in keywords)
+
+
+def _is_adjacent_business_question(
+    text: str,
+    business_keywords: Iterable[str],
+    labor_keywords: Iterable[str],
+) -> bool:
+    """Reject corporate-law questions unless they are anchored in labor law."""
+
+    normalized_text = text.casefold()
+    has_business_topic = any(keyword.casefold() in normalized_text for keyword in business_keywords)
+    has_labor_context = any(keyword.casefold() in normalized_text for keyword in labor_keywords)
+    return has_business_topic and not has_labor_context
