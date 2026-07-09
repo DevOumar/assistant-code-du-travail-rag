@@ -14,6 +14,15 @@ from rag import RagResponse, RetrievedChunk
 
 CONVERSATIONS_KEY = "conversations"
 CURRENT_CONVERSATION_INDEX_KEY = "current_conversation_index"
+PRESET_QUESTION_KEY = "preset_question"
+
+QUESTION_PRESETS = (
+    "Quelle est la durée légale du travail ?",
+    "Quels sont les congés payés acquis après un an de travail ?",
+    "Quel est le préavis en cas de démission d'un CDI ?",
+    "En cas de rupture conventionnelle, quelles indemnités sont dues ?",
+    "En cas de fusion-acquisition, que devient le contrat de travail des salariés ?",
+)
 
 
 class AnsweringPipeline(Protocol):
@@ -39,8 +48,8 @@ class UnavailablePipeline:
             question=question,
             answer=(
                 "Le pipeline RAG complet n'est pas disponible dans cette session. "
-                "Verifiez la configuration, la cle Groq et l'indexation ChromaDB "
-                "avant de repondre sur le fond.\n\n"
+                "Vérifiez la configuration, la clé Groq et l'indexation ChromaDB "
+                "avant de répondre sur le fond.\n\n"
                 f"{self.legal_disclaimer}"
             ),
             sources=[],
@@ -54,10 +63,10 @@ def format_sources_markdown(sources: list[RetrievedChunk]) -> str:
     if not sources:
         return ""
 
-    lines = ["**Sources utilisees**"]
+    lines = ["**Sources utilisées**"]
     for index, source in enumerate(sources, 1):
-        article = source.metadata.get("article") or "article non renseigne"
-        origin = source.metadata.get("source") or "source non renseignee"
+        article = source.metadata.get("article") or "article non renseigné"
+        origin = source.metadata.get("source") or "source non renseignée"
         score = f" - score {source.score:.4f}" if source.score is not None else ""
         lines.append(f"- [{index}] `{article}` - {origin}{score}")
 
@@ -67,11 +76,11 @@ def format_sources_markdown(sources: list[RetrievedChunk]) -> str:
 def build_corpus_status(config: AppConfig) -> str:
     """Return a concise status line about corpus freshness."""
 
-    source = config.corpus.source or "source non renseignee"
+    source = config.corpus.source or "source non renseignée"
     corpus_date_str = config.corpus.date
 
     if not corpus_date_str:
-        return f"Corpus : {source} | Date : non renseignee"
+        return f"Corpus : {source} | Date : non renseignée"
 
     try:
         corpus_date = datetime.fromisoformat(corpus_date_str).date()
@@ -87,10 +96,10 @@ def build_corpus_status(config: AppConfig) -> str:
     elif months <= 12:
         risk = "Moyen"
     else:
-        risk = "Eleve"
+        risk = "Élevé"
 
     age_text = f"{months} mois" if months > 0 else "<1 mois"
-    return f"Corpus : {source} | Date : {corpus_date_str} | Age : {age_text} | Risque d'obsolescence : {risk}"
+    return f"Corpus : {source} | Date : {corpus_date_str} | Âge : {age_text} | Risque d'obsolescence : {risk}"
 
 
 def main() -> None:
@@ -113,17 +122,17 @@ def main() -> None:
 
     with st.sidebar:
         st.markdown("<div class='sidebar-title'>Assistant Code du travail</div>", unsafe_allow_html=True)
-        st.caption("RAG documentaire et reponses sourcées")
+        st.caption("RAG documentaire et réponses sourcées")
 
         if not config.llm.api_key:
-            st.warning("GROQ_API_KEY n'est pas definie.")
+            st.warning("GROQ_API_KEY n'est pas définie.")
 
         st.markdown(
             f"""
             <div class='sidebar-card'>
                 <div class='sidebar-card__label'>Corpus</div>
-                <div class='sidebar-card__value'>{config.corpus.source or 'non renseigne'}</div>
-                <div class='sidebar-card__meta'>Date : {config.corpus.date or 'non renseignee'}</div>
+                <div class='sidebar-card__value'>{config.corpus.source or 'non renseigné'}</div>
+                <div class='sidebar-card__meta'>Date : {config.corpus.date or 'non renseignée'}</div>
                 <div class='sidebar-card__meta'>Top-k : {config.retrieval.top_k}</div>
                 <div class='sidebar-card__meta'>{build_corpus_status(config)}</div>
             </div>
@@ -154,16 +163,22 @@ def main() -> None:
                 st.rerun()
 
         st.divider()
-        st.markdown("**Questions de test**")
+        st.markdown("**Thèmes couverts**")
         st.markdown(
             """
-            - Duree legale du travail
-            - Conges payes et acquisition
-            - Preavis en CDI
+            - Durée légale du travail
+            - Congés payés et acquisition
+            - Préavis en CDI
             - Rupture conventionnelle
-            - Fusion acquisition et contrat de travail
+            - Fusion-acquisition et contrat de travail
             """
         )
+
+        st.markdown("**Questions rapides**")
+        for preset in QUESTION_PRESETS:
+            if st.button(preset, use_container_width=True, key=f"preset::{preset}"):
+                st.session_state[PRESET_QUESTION_KEY] = preset
+                st.rerun()
 
         st.markdown(
             """
@@ -176,7 +191,7 @@ def main() -> None:
         )
 
     st.title("Assistant Code du travail")
-    st.caption("Posez une question sur le droit du travail francais.")
+    st.caption("Posez une question sur le droit du travail français.")
 
     current_messages = st.session_state[CONVERSATIONS_KEY][st.session_state[CURRENT_CONVERSATION_INDEX_KEY]][
         "messages"
@@ -184,7 +199,9 @@ def main() -> None:
     for message in current_messages:
         _render_message(st, message)
 
-    question = st.chat_input("Exemple : Quelle est la duree legale du travail ?")
+    question = st.session_state.pop(PRESET_QUESTION_KEY, None)
+    if question is None:
+        question = st.chat_input("Exemple : Quelle est la durée légale du travail ?")
     if not question:
         return
 
@@ -194,7 +211,7 @@ def main() -> None:
 
     decision = moderator.moderate(question)
     if not decision.is_allowed:
-        answer = "Question refusee par la moderation :\n" + "\n".join(
+        answer = "Question refusée par la modération :\n" + "\n".join(
             f"- {reason}" for reason in decision.reasons
         )
         assistant_message = ChatMessage(role="assistant", content=answer)
@@ -210,8 +227,8 @@ def main() -> None:
             assistant_message = ChatMessage(
                 role="assistant",
                 content=(
-                    "Le pipeline RAG n'est pas pret pour repondre a cette question. "
-                    f"Detail technique : {exc}"
+                    "Le pipeline RAG n'est pas prêt pour répondre à cette question. "
+                    f"Détail technique : {exc}"
                 ),
             )
 

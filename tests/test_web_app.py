@@ -5,6 +5,7 @@ from web_app import (
     _build_pipeline_or_fallback,
     build_corpus_status,
     format_sources_markdown,
+    QUESTION_PRESETS,
 )
 
 
@@ -28,7 +29,7 @@ def test_format_sources_markdown_renders_articles_and_scores() -> None:
         ]
     )
 
-    assert "**Sources utilisees**" in markdown
+    assert "**Sources" in markdown
     assert "`L3121-27`" in markdown
     assert "Code du travail" in markdown
     assert "0.9123" in markdown
@@ -71,3 +72,9 @@ def test_build_pipeline_or_fallback_keeps_ui_available(monkeypatch) -> None:
     monkeypatch.setattr("web_app.build_rag_pipeline", fail)
 
     assert isinstance(_build_pipeline_or_fallback(config), UnavailablePipeline)
+
+
+def test_question_presets_cover_core_topics() -> None:
+    assert len(QUESTION_PRESETS) >= 5
+    assert any("durée légale du travail" in preset for preset in QUESTION_PRESETS)
+    assert any("fusion-acquisition" in preset for preset in QUESTION_PRESETS)
